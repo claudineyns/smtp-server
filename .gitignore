@@ -3,5 +3,7 @@ target/
 .settings/
 .project
 .classpath
-doc/
 dependency-reduced-pom.xml
+
+doc/
+.keystore/
