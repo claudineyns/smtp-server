@@ -47,4 +47,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-* [RFC5321](https://www.ietf.org/rfc/rfc5321.txt)
+* [RFC5321 Simple Mail Transfer Protocol](https://www.ietf.org/rfc/rfc5321.txt)
+* [RFC4954 SMTP Service Extension for Authentication](https://www.ietf.org/rfc/rfc4954.txt)
+* [RFC3463 Enhanced Mail System Status Codes](https://www.ietf.org/rfc/rfc3463.txt)
