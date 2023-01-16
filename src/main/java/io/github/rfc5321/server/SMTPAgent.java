@@ -6,10 +6,12 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import io.github.rfc5321.logging.LoggerService;
 
-import java.util.Collections;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -73,6 +75,17 @@ public class SMTPAgent {
 						.ofNullable(System.getProperty("smtp.port"))
 						.orElse("25"));
 
+		final String serviceWhitelist = Optional
+				.ofNullable(System.getenv("SMTP_FQDN_WHITELIST"))
+				.orElse(Optional
+						.ofNullable(System.getProperty("smtp.fqdn.whitelist"))
+						.orElse("localhost"));
+
+		final List<String> whitelist = Arrays
+			.asList(serviceWhitelist.split("\\,"))
+			.stream().filter(fqdn -> ! fqdn.isBlank())
+			.collect(Collectors.toList());
+
 		final Inet4Address address = (Inet4Address) Inet4Address.getByName(serviceHost);
 		final InetSocketAddress socketAddress = new InetSocketAddress(address, Integer.parseInt(servicePort));
 
@@ -91,7 +104,7 @@ public class SMTPAgent {
 				break;
 			}
 
-			Executors.newSingleThreadExecutor().submit(new SMTPInstance(client, UUID.randomUUID(), Collections.emptyList()));
+			Executors.newSingleThreadExecutor().submit(new SMTPInstance(client, UUID.randomUUID(), whitelist));
 		}
 
 	}
