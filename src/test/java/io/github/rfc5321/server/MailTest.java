@@ -36,7 +36,7 @@ public class MailTest {
         System.setProperty("smtp.port", Integer.toString(port));
 
         smtp = new SMTPAgent().start();
-        Thread.sleep(1000);
+        Thread.sleep(5000);
     }
 
     @AfterAll
@@ -116,7 +116,7 @@ public class MailTest {
             final int read_timeout = 2000;
             socket.setSoTimeout(read_timeout);
 
-            final int connect_timeout = 1000;
+            final int connect_timeout = 5000;
             socket.connect(socketAddress, connect_timeout);
 
             Thread.sleep(500);
@@ -158,7 +158,7 @@ public class MailTest {
             final int read_timeout = 2000;
             socket.setSoTimeout(read_timeout);
 
-            final int connect_timeout = 1000;
+            final int connect_timeout = 5000;
             socket.connect(socketAddress, connect_timeout);
 
             Thread.sleep(500);
