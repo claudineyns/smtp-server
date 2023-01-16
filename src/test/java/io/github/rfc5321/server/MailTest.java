@@ -26,7 +26,7 @@ import javax.mail.internet.MimeMessage;
 @TestInstance(Lifecycle.PER_CLASS)
 public class MailTest {
     static final String hostname = "localhost";
-    static final int port = 587;
+    static final int port = 55027;
 
     SMTPAgent smtp;
 
@@ -36,7 +36,7 @@ public class MailTest {
         System.setProperty("smtp.port", Integer.toString(port));
 
         smtp = new SMTPAgent().start();
-        Thread.sleep(5000);
+        Thread.sleep(2000);
     }
 
     @AfterAll
@@ -53,7 +53,7 @@ public class MailTest {
         prop.put("mail.smtp.host", "localhost");
         prop.put("mail.smtp.auth", "true");
 
-        prop.put("mail.smtp.port", "587");
+        prop.put("mail.smtp.port", Integer.toString(port));
         // prop.put("mail.smtp.starttls.enable", "true"); // TLS
 
         final Session session = Session.getInstance(
@@ -98,13 +98,13 @@ public class MailTest {
         System.out.println("[INFO] CLIENT REQUEST\n" + request);
         out.write(request.getBytes(ASCII));
         out.flush();
-        Thread.sleep(500);
+        Thread.sleep(1000);
     }
 
     void response(final InputStream in) throws Exception {
         String data = content(in);
         System.out.println("\n[INFO] CLIENT RESPONSE\n" + data);
-        Thread.sleep(500);
+        Thread.sleep(1000);
     }
 
     @Test
