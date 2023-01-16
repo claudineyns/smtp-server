@@ -1,0 +1,96 @@
+package io.github.rfc3507;
+
+import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.text.SimpleDateFormat;
+import java.util.Collections;
+import java.util.Date;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class SMTPAgent {
+
+    private final List<String> whiteList = new LinkedList<>();
+
+    private static int port = 0;
+
+    public static void main(String[] args) throws IOException {
+
+        String argPort = "25";
+
+        if( args != null) {
+            for(String arg: args) {
+                if( arg.startsWith("--port=") ) {
+                    argPort = arg.substring(7);
+                }
+            }
+        }
+
+        try {
+            port = Integer.parseInt(argPort);
+        } catch(NumberFormatException e) {
+            port = 25;
+        }
+
+        new SMTPAgent().daemon();
+    }
+
+    private AtomicInteger counter = new AtomicInteger();
+
+    private void log(int id, String message) {
+        String ts = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z").format(new Date());
+        System.out.println(String.format("%s SMTPD[%d] %s", ts, id, message));
+    }
+
+    private void daemon() throws IOException {
+
+        loadWhiteList();
+
+        ServerSocket server = new ServerSocket(port);
+        //ServerSocket server = new ServerSocket(25);
+        //ServerSocket server = new ServerSocket(587);
+
+        log(0, "--- Version 0.10.3 ---");
+        log(0, "Server started on port "+port+".");
+
+        int id = 0;
+
+        try {
+            while(true) {
+                Socket socket = server.accept();
+                log(id, "Connection received!");
+                new Thread(new SMTPServer(socket, UUID.randomUUID(), Collections.emptyList())).start();
+            }
+        } finally {
+            server.close();
+        }
+
+    }
+
+    private void loadWhiteList() throws IOException {
+        
+        String whitelistFile = System.getenv("SMTP_WHITELIST");
+        StringBuilder list = new StringBuilder();
+        ByteArrayOutputStream cache = new ByteArrayOutputStream();
+
+        try(InputStream is = new FileInputStream(whitelistFile)) {
+            int reader = -1;
+            while((reader = is.read()) != -1) {
+                cache.write(reader);
+            }
+        }
+
+        list.append(new String(cache.toByteArray(),"ascii"));
+        for( String host: list.toString().split("\\n") ) {
+            whiteList.add(host);
+        }
+        
+    }
+
+}
