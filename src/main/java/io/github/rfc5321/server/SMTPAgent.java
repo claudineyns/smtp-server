@@ -11,7 +11,6 @@ import java.util.stream.Collectors;
 import io.github.rfc5321.logging.LoggerService;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;

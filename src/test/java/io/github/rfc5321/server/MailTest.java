@@ -11,7 +11,9 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Properties;
+import java.util.Random;
 
+import org.apache.commons.io.IOUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -33,7 +35,7 @@ import javax.mail.internet.MimeMultipart;
 @TestInstance(Lifecycle.PER_CLASS)
 public class MailTest {
     static final String hostname = "localhost";
-    static final int port = 587;
+    static final int port = 50000 + new Random().nextInt(1000);
 
     SMTPAgent smtp;
 
@@ -93,7 +95,7 @@ public class MailTest {
         final File attachment = new File(System.getProperty("java.io.tmpdir"), "rfc6152.pdf");
         try (final OutputStream content = new FileOutputStream(attachment)) {
             URL url = new URL("https://www.rfc-editor.org/rfc/pdfrfc/rfc6152.txt.pdf");
-            content.write(url.openStream().readAllBytes());
+            IOUtils.copy(url.openStream(), content);
             content.flush();
         }
 
