@@ -28,7 +28,7 @@ public class SMTPInstance implements Runnable {
     private static final Charset ASCII = StandardCharsets.US_ASCII;
 
     private final Logger logger = LoggerService.getLogger(getClass().getSimpleName());
-    
+
     @SuppressWarnings("unused")
     private final UUID sessionId;
 
@@ -49,29 +49,28 @@ public class SMTPInstance implements Runnable {
         this.socket = socket;
         this.sessionId = id;
         this.whiteList.addAll(whiteList);
-        
+
         this.timestamp = ZonedDateTime.now(ZoneId.systemDefault())
-            .format(DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US));
+                .format(DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US));
 
         this.clientHost = socket.getInetAddress().getHostAddress();
         this.clientAddress = socket.getInetAddress().getHostName();
 
         log(String.format("Connection from %s [%s]",
-            this.clientHost,
-            this.clientAddress));
+                this.clientHost,
+                this.clientAddress));
 
         this.localhost = Optional
-            .ofNullable(System.getenv("SMTP_HOSTNAME"))
-            .orElse(Optional
-                .ofNullable(System.getProperty("smtp.hostname"))
-                .orElse(System.getenv("HOSTNAME"))
-        );
+                .ofNullable(System.getenv("SMTP_HOSTNAME"))
+                .orElse(Optional
+                        .ofNullable(System.getProperty("smtp.hostname"))
+                        .orElse(System.getenv("HOSTNAME")));
 
         this.logFolder = Optional
-            .ofNullable(System.getenv("SMTP_LOG_FOLDER"))
-            .orElse(Optional
-                .ofNullable(System.getProperty("smtp.log.folder"))
-                .orElse(System.getProperty("java.io.tmpdir")));
+                .ofNullable(System.getenv("SMTP_LOG_FOLDER"))
+                .orElse(Optional
+                        .ofNullable(System.getProperty("smtp.log.folder"))
+                        .orElse(System.getProperty("java.io.tmpdir")));
 
     }
 
@@ -82,10 +81,10 @@ public class SMTPInstance implements Runnable {
     private void slog(CharSequence message) {
         final String data = message.toString();
 
-        if( Pattern.compile("^\\d{3}\\-").matcher(data).find() ) {
-            logger.info("S:\n"+data);
+        if (Pattern.compile("^\\d{3}\\-").matcher(data).find()) {
+            logger.info("S:\n" + data);
         } else {
-            logger.info("S: "+data);
+            logger.info("S: " + data);
         }
     }
 
@@ -94,18 +93,21 @@ public class SMTPInstance implements Runnable {
     private boolean closed = false;
 
     public void run() {
-        CompletableFuture.runAsync(()->checkClosure());
+        CompletableFuture.runAsync(() -> checkClosure());
 
         processRequest();
     }
 
     private void checkClosure() {
-        while(!closed) {
+        while (!closed) {
             last = System.currentTimeMillis();
             try {
-                synchronized(_self) { _self.wait(40000); }
-            } catch(InterruptedException e) { }
-            if( (System.currentTimeMillis() - last) > 30000 ) {
+                synchronized (_self) {
+                    _self.wait(40000);
+                }
+            } catch (InterruptedException e) {
+            }
+            if ((System.currentTimeMillis() - last) > 30000) {
                 close();
                 break;
             }
@@ -115,10 +117,10 @@ public class SMTPInstance implements Runnable {
     private void processRequest() {
         try {
             process();
-        } catch(IOException e) {
+        } catch (IOException e) {
             System.err.println(e.getMessage());
         } finally {
-            if(!closed) {
+            if (!closed) {
                 close();
             }
         }
@@ -132,7 +134,7 @@ public class SMTPInstance implements Runnable {
     }
 
     private byte startPresentation() throws IOException {
-        final String presentation = "220 "+this.localhost+" ESMTP Ready\r\n";
+        final String presentation = "220 " + this.localhost + " ESMTP Ready\r\n";
 
         os.write(presentation.getBytes(ASCII));
         os.flush();
@@ -144,15 +146,17 @@ public class SMTPInstance implements Runnable {
         final ByteArrayOutputStream st = new ByteArrayOutputStream();
 
         int reader = -1;
-        while((reader = is.read()) != -1) {
-            if( reader == '\r' ) { continue; }
-            if( reader == '\n' ) {
+        while ((reader = is.read()) != -1) {
+            if (reader == '\r') {
+                continue;
+            }
+            if (reader == '\n') {
                 try {
                     checkStatement(st);
-                } catch(IOException e) {
+                } catch (IOException e) {
                     break;
                 }
-                st.reset();                
+                st.reset();
             } else {
                 st.write(reader);
             }
@@ -164,82 +168,84 @@ public class SMTPInstance implements Runnable {
     private byte checkStatement(final ByteArrayOutputStream os) throws IOException {
 
         last = System.currentTimeMillis();
-        synchronized(_self) { _self.notifyAll(); }
+        synchronized (_self) {
+            _self.notifyAll();
+        }
 
         final byte[] raw = os.toByteArray();
         final String statement = new String(raw, ASCII);
 
         log(String.format("C: %s", statement));
 
-        if( "QUIT".equalsIgnoreCase(statement) ) {
+        if ("QUIT".equalsIgnoreCase(statement)) {
             quit(); // will throw exception to close
         }
 
-        if( "HELP".equalsIgnoreCase(statement) ) {
+        if ("HELP".equalsIgnoreCase(statement)) {
             return help();
         }
 
-        if( statement.toUpperCase().startsWith("HELO ") ) {
+        if (statement.toUpperCase().startsWith("HELO ")) {
             return helo(statement, raw);
         }
 
-        if( statement.toUpperCase().startsWith("EHLO ") ) {
+        if (statement.toUpperCase().startsWith("EHLO ")) {
             return ehlo(statement, raw);
         }
 
-        if( "STARTTLS".equalsIgnoreCase(statement) ) {
+        if ("STARTTLS".equalsIgnoreCase(statement)) {
             return startTls();
         }
 
-        if( "VRFY".equalsIgnoreCase(statement) ) {
+        if ("VRFY".equalsIgnoreCase(statement)) {
             return verifyBadSintax();
         }
 
-        if( statement.toUpperCase().startsWith("VRFY ") ) {
+        if (statement.toUpperCase().startsWith("VRFY ")) {
             return verify(statement, raw);
         }
 
-        if( "EXPN".equalsIgnoreCase(statement) ) {
+        if ("EXPN".equalsIgnoreCase(statement)) {
             return verifyBadSintax();
         }
 
-        if( statement.toUpperCase().startsWith("EXPN ") ) {
+        if (statement.toUpperCase().startsWith("EXPN ")) {
             return expand(statement, raw);
         }
 
-        if( "AUTH LOGIN".equalsIgnoreCase(statement) ) {
+        if ("AUTH LOGIN".equalsIgnoreCase(statement)) {
             return authLogin();
         }
 
-        if( statement.toUpperCase().startsWith("AUTH LOGIN ") ) {
+        if (statement.toUpperCase().startsWith("AUTH LOGIN ")) {
             return authLogin(statement, raw);
         }
 
-        if( "AUTH PLAIN".equalsIgnoreCase(statement) ) {
+        if ("AUTH PLAIN".equalsIgnoreCase(statement)) {
             return authPlain(statement, raw);
         }
 
-        if( statement.toUpperCase().startsWith("AUTH PLAIN ") ) {
+        if (statement.toUpperCase().startsWith("AUTH PLAIN ")) {
             return authPlain(statement, raw);
         }
 
-        if( statement.toUpperCase().startsWith("MAIL FROM:") ) {
+        if (statement.toUpperCase().startsWith("MAIL FROM:")) {
             return mailFrom(statement, raw);
         }
 
-        if( statement.toUpperCase().startsWith("RCPT TO:") ) {
+        if (statement.toUpperCase().startsWith("RCPT TO:")) {
             return rcptTo(statement, raw);
         }
 
-        if( "NOOP".equalsIgnoreCase(statement) ) {
+        if ("NOOP".equalsIgnoreCase(statement)) {
             return noop();
         }
 
-        if( "DATA".equalsIgnoreCase(statement) ) {
+        if ("DATA".equalsIgnoreCase(statement)) {
             return data();
         }
 
-        if( "RSET".equalsIgnoreCase(statement) ) {
+        if ("RSET".equalsIgnoreCase(statement)) {
             return rset();
         }
 
@@ -257,11 +263,11 @@ public class SMTPInstance implements Runnable {
         return 0;
     }
 
-    private byte helo(final String statement, final byte[]raw ) throws IOException {
+    private byte helo(final String statement, final byte[] raw) throws IOException {
         final StringBuilder response = new StringBuilder();
 
         final String host = statement.substring(5);
-        response.append("250 "+this.localhost+" greets "+host+"\r\n");
+        response.append("250 " + this.localhost + " greets " + host + "\r\n");
         slog(response);
 
         os.write(response.toString().getBytes(ASCII));
@@ -274,12 +280,12 @@ public class SMTPInstance implements Runnable {
      * https://www.rfc-editor.org/rfc/rfc2821#page-45
      */
 
-    private byte ehlo(final String statement, final byte[]raw ) throws IOException {
+    private byte ehlo(final String statement, final byte[] raw) throws IOException {
         final StringBuilder response = new StringBuilder();
 
         final String host = statement.substring(5);
 
-        response.append("250-"+this.localhost+" greets "+host+"\r\n");
+        response.append("250-" + this.localhost + " greets " + host + "\r\n");
         response.append("250-HELP\r\n");
         response.append("250-AUTH PLAIN LOGIN\r\n");
         response.append("250-ENHANCEDSTATUSCODES\r\n");
@@ -330,33 +336,33 @@ public class SMTPInstance implements Runnable {
     private byte authLogin() throws IOException {
 
         StringBuilder response = null;
-        
+
         response = new StringBuilder();
-        
+
         final String usernameLabel = "'Username:"; // base64: VXNlcm5hbWU6
         response
-            .append("334 ")
-            .append(Base64.getEncoder().encodeToString(usernameLabel.getBytes(ASCII)))
-            .append("\r\n");
-        
+                .append("334 ")
+                .append(Base64.getEncoder().encodeToString(usernameLabel.getBytes(ASCII)))
+                .append("\r\n");
+
         os.write(response.toString().getBytes(ASCII));
         os.flush();
 
         String username = getContent();
-        
+
         return validateAuthLoginCredential(username);
     }
 
-    private byte authLogin(String statement, byte[]raw) throws IOException {
+    private byte authLogin(String statement, byte[] raw) throws IOException {
         final String username = statement.substring(11);
 
-        if( username.isEmpty() ) {
+        if (username.isEmpty()) {
             return authLogin();
         }
 
         StringBuilder response = new StringBuilder();
 
-        if( username.trim().isEmpty() ) {
+        if (username.trim().isEmpty()) {
             response.append("535 5.7.8 Authentication credentials invalid\r\n");
             slog(response);
 
@@ -375,32 +381,32 @@ public class SMTPInstance implements Runnable {
 
         final String passwordLabel = "Password:"; // base64: UGFzc3dvcmQ6
         response
-            .append("334 ")
-            .append(Base64.getEncoder().encodeToString(passwordLabel.getBytes(ASCII)))
-            .append("\r\n");
-        
+                .append("334 ")
+                .append(Base64.getEncoder().encodeToString(passwordLabel.getBytes(ASCII)))
+                .append("\r\n");
+
         os.write(response.toString().getBytes(ASCII));
         os.flush();
 
         final String password = getContent();
 
         response = new StringBuilder();
-        
-        if( password.trim().isEmpty() ) {
+
+        if (password.trim().isEmpty()) {
             response.append("535 5.7.8 Authentication credentials invalid\r\n");
         } else {
             this.password = new String(Base64.getDecoder().decode(password), ASCII);
 
-            if( LOCAL_USERNAME.equals(this.username) && LOCAL_PASSWORD.equals(this.password) ) {
+            if (LOCAL_USERNAME.equals(this.username) && LOCAL_PASSWORD.equals(this.password)) {
                 this.authenticated = true;
-                response.append("235 2.7.0 Authentication Succeeded\r\n");    
+                response.append("235 2.7.0 Authentication Succeeded\r\n");
             } else {
                 response.append("500 5.7.0 Authentication credentials invalid\r\n");
             }
         }
 
         slog(response);
-        
+
         os.write(response.toString().getBytes(ASCII));
         os.flush();
 
@@ -410,21 +416,20 @@ public class SMTPInstance implements Runnable {
     private String getContent() throws IOException {
         final ByteArrayOutputStream data = new ByteArrayOutputStream();
 
-        int[] control = {-1, -1};
+        int[] control = { -1, -1 };
         int reader = -1;
-        while((reader = is.read()) != -1) {
+        while ((reader = is.read()) != -1) {
 
             control[0] = control[1];
             control[1] = reader;
 
-            if( reader == '\r' ) {
+            if (reader == '\r') {
                 continue;
             }
 
-            if( control[0] == '\r' && control[1] == '\n'  
-            ) {
+            if (control[0] == '\r' && control[1] == '\n') {
                 break;
-            } 
+            }
 
             data.write(reader);
 
@@ -433,17 +438,17 @@ public class SMTPInstance implements Runnable {
         return new String(data.toByteArray(), ASCII);
     }
 
-    private byte authPlain(String statement, byte[]raw) throws IOException {
+    private byte authPlain(String statement, byte[] raw) throws IOException {
         final String credential = statement.substring(11);
 
-        if( credential.isEmpty() ) {
+        if (credential.isEmpty()) {
             authPlainTransition();
             return 0;
         }
 
         return authPlainValidation(credential);
     }
-    
+
     private byte authPlainTransition() throws IOException {
         final StringBuilder response = new StringBuilder();
 
@@ -460,11 +465,12 @@ public class SMTPInstance implements Runnable {
     private byte authPlainValidation(String credential) throws IOException {
         final StringBuilder response = new StringBuilder();
 
-        if( credential.trim().isEmpty() ) {
+        if (credential.trim().isEmpty()) {
             response.append("535 5.7.8  Authentication credentials invalid\r\n");
         } else {
-            final String validCredential = Base64.getEncoder().encodeToString((LOCAL_USERNAME+":"+LOCAL_PASSWORD).getBytes(ASCII));
-            if(validCredential.equals(credential)) {
+            final String validCredential = Base64.getEncoder()
+                    .encodeToString((LOCAL_USERNAME + ":" + LOCAL_PASSWORD).getBytes(ASCII));
+            if (validCredential.equals(credential)) {
                 this.authenticated = true;
                 response.append("235 2.7.0  Authentication Succeeded\r\n");
             } else {
@@ -483,7 +489,7 @@ public class SMTPInstance implements Runnable {
     private byte verifyBadSintax() throws IOException {
         final StringBuilder response = new StringBuilder();
 
-        response.append("501 5.1.1 Please, provide a mailbox\r\n");    
+        response.append("501 5.1.1 Please, provide a mailbox\r\n");
         slog(response);
 
         os.write(response.toString().getBytes(ASCII));
@@ -496,18 +502,18 @@ public class SMTPInstance implements Runnable {
     static final Mailbox JANE_EXAMPLE = new Mailbox("Jane Doe", "jane.doe", "example.com");
     static final Mailbox MAILING_LIST_EXAMPLE = new Mailbox("mailing@example.com");
 
-    private byte verify(String statement, byte[]raw) throws IOException {
+    private byte verify(String statement, byte[] raw) throws IOException {
         final StringBuilder response = new StringBuilder();
 
-        final String mailbox = statement.substring(statement.indexOf(' ')+1).trim();
+        final String mailbox = statement.substring(statement.indexOf(' ') + 1).trim();
 
-        if( MAILING_LIST_EXAMPLE.is(mailbox) ) {
+        if (MAILING_LIST_EXAMPLE.is(mailbox)) {
             response.append("550 That is a mailing list, not a user");
-        } else if( (JOHN_EXAMPLE.getUser()).equals(mailbox) || JOHN_EXAMPLE.is(mailbox)) {
+        } else if ((JOHN_EXAMPLE.getUser()).equals(mailbox) || JOHN_EXAMPLE.is(mailbox)) {
             response.append("250 ").append(JOHN_EXAMPLE.getFullEmail()).append("\r\n");
-        } else if( (JANE_EXAMPLE.getUser()).equals(mailbox) || JANE_EXAMPLE.is(mailbox)) {
+        } else if ((JANE_EXAMPLE.getUser()).equals(mailbox) || JANE_EXAMPLE.is(mailbox)) {
             response.append("250 ").append(JANE_EXAMPLE.getFullEmail()).append("\r\n");
-        } else if( "doe".equals(mailbox) ) {
+        } else if ("doe".equals(mailbox)) {
             response.append("553-Ambiguous; Possibilities are\r\n");
             response.append("553-").append(JOHN_EXAMPLE.getFullEmail()).append("\r\n");
             response.append("553 ").append(JANE_EXAMPLE.getFullEmail()).append("\r\n");
@@ -524,17 +530,17 @@ public class SMTPInstance implements Runnable {
         return 0;
     }
 
-    private byte expand(String statement, byte[]raw) throws IOException {
+    private byte expand(String statement, byte[] raw) throws IOException {
         final StringBuilder response = new StringBuilder();
 
-        final String mailbox = statement.substring(statement.indexOf(' ')+1).trim();
+        final String mailbox = statement.substring(statement.indexOf(' ') + 1).trim();
 
-        if( MAILING_LIST_EXAMPLE.is(mailbox) || MAILING_LIST_EXAMPLE.getUser().equals(mailbox) ) {
+        if (MAILING_LIST_EXAMPLE.is(mailbox) || MAILING_LIST_EXAMPLE.getUser().equals(mailbox)) {
             response.append("250-").append(JOHN_EXAMPLE.getFullEmail()).append("\r\n");
             response.append("250 ").append(JANE_EXAMPLE.getFullEmail()).append("\r\n");
-        } else if( (JOHN_EXAMPLE.getUser()).equals(mailbox) || JOHN_EXAMPLE.is(mailbox)) {
+        } else if ((JOHN_EXAMPLE.getUser()).equals(mailbox) || JOHN_EXAMPLE.is(mailbox)) {
             response.append("550 That is a user name, not a mailing list\r\n");
-        } else if( (JANE_EXAMPLE.getUser()).equals(mailbox) || JANE_EXAMPLE.is(mailbox)) {
+        } else if ((JANE_EXAMPLE.getUser()).equals(mailbox) || JANE_EXAMPLE.is(mailbox)) {
             response.append("550 That is a user name, not a mailing list\r\n");
         } else {
             response.append("252 2.1.0 Unable to verify mailbox for mailing list\r\n");
@@ -551,35 +557,35 @@ public class SMTPInstance implements Runnable {
     private Boolean fromHost = null;
     private Mailbox sender = null;
 
-    private byte mailFrom(final String statement, final byte[]raw) throws IOException {
+    private byte mailFrom(final String statement, final byte[] raw) throws IOException {
         final String mailbox = statement.substring(10);
-        
+
         String name = "";
         String email = mailbox;
 
-        if(mailbox.contains(" ")) {
+        if (mailbox.contains(" ")) {
             name = mailbox.substring(0, mailbox.indexOf('<'));
             email = mailbox.substring(mailbox.indexOf('<'));
         }
         email = email.replaceAll("[<>]", "");
 
         final String user = email.substring(0, email.indexOf('@'));
-        final String domain = email.substring(email.indexOf('@')+1).toLowerCase();
+        final String domain = email.substring(email.indexOf('@') + 1).toLowerCase();
 
         this.sender = new Mailbox(name, user, domain);
 
         this.fromHost = Boolean.valueOf(this.whiteList.isEmpty());
         this.whiteList
-            .stream()
-            .filter(host -> this.sender.getDomain().equals(host.toLowerCase()))
-            .findFirst()
-            .ifPresent(q -> fromHost = Boolean.TRUE);
+                .stream()
+                .filter(host -> this.sender.getDomain().equals(host.toLowerCase()))
+                .findFirst()
+                .ifPresent(q -> fromHost = Boolean.TRUE);
 
         final StringBuilder response = new StringBuilder();
 
-        if( Boolean.TRUE.equals(fromHost) && !authenticated ) {
-            response.append("530 5.7.0 Authentication required\r\n");    
-        } else {            
+        if (Boolean.TRUE.equals(fromHost) && !authenticated) {
+            response.append("530 5.7.0 Authentication required\r\n");
+        } else {
             response.append(String.format("250 2.1.0 <%s>: Originator OK\r\n", this.sender.getEmail()));
         }
         slog(response);
@@ -593,38 +599,38 @@ public class SMTPInstance implements Runnable {
     private Boolean toHost = null;
     private List<Mailbox> recipients = new LinkedList<>();
 
-    private byte rcptTo(final String statement, final byte[]raw) throws IOException {
+    private byte rcptTo(final String statement, final byte[] raw) throws IOException {
         final String mailbox = statement.substring(statement.indexOf('<'));
-        
+
         String name = "";
         String email = mailbox;
 
-        if(mailbox.contains(" ")) {
+        if (mailbox.contains(" ")) {
             name = mailbox.substring(0, mailbox.indexOf('<'));
-            email = mailbox.substring(mailbox.indexOf('<'));
+            email = mailbox.substring(mailbox.indexOf('<'), mailbox.indexOf('>')+1);
         }
         email = email.replaceAll("[<>]", "");
 
         final String user = email.substring(0, email.indexOf('@'));
-        final String domain = email.substring(0, email.indexOf('@')+1).toLowerCase();
+        final String domain = email.substring(email.indexOf('@') + 1).toLowerCase();
 
         final Mailbox recipient = new Mailbox(name, user, domain);
         this.recipients.add(new Mailbox(name, user, domain));
 
         this.toHost = Boolean.valueOf(this.whiteList.isEmpty());
         this.whiteList
-            .stream()
-            .filter(host -> recipient.getDomain().equals(host))
-            .findFirst()
-            .ifPresent(host -> toHost = Boolean.TRUE);
+                .stream()
+                .filter(host -> recipient.getDomain().equals(host))
+                .findFirst()
+                .ifPresent(host -> toHost = Boolean.TRUE);
 
         final StringBuilder response = new StringBuilder();
 
-        if( this.fromHost == null ) {
-            response.append("500 5.7.0 Please, identify yourself\r\n");    
-        } else if( Boolean.TRUE.equals(fromHost) && !authenticated ) {
-            response.append("530 5.7.0 Authentication required\r\n");    
-        } else if( Boolean.FALSE.equals(fromHost) && Boolean.FALSE.equals(toHost) ) {
+        if (this.fromHost == null) {
+            response.append("500 5.7.0 Please, identify yourself\r\n");
+        } else if (Boolean.TRUE.equals(fromHost) && !authenticated) {
+            response.append("530 5.7.0 Authentication required\r\n");
+        } else if (Boolean.FALSE.equals(fromHost) && Boolean.FALSE.equals(toHost)) {
             toHost = null;
             response.append("551-5.7.1 You've been a naughty guy, right?\r\n");
             response.append("551-5.7.1 Forwarding to remote hosts is not acceptable\r\n");
@@ -659,14 +665,14 @@ public class SMTPInstance implements Runnable {
 
         final StringBuilder response = new StringBuilder();
 
-        if( this.fromHost == null && this.toHost == null ) {
-            response.append("554 5.1.0 No valid recipients\r\n");    
-        } else if( this.fromHost == null ) {
-            response.append("554 5.1.8 Please, identify yourself\r\n");    
-        } else if( Boolean.TRUE.equals(this.fromHost) && ! this.authenticated ) {
-            response.append("530 5.7.0 Authentication required\r\n");    
-        } else if( this.toHost == null ) {
-            response.append("554 5.1.1 Please, specify a destination mailbox\r\n");    
+        if (this.fromHost == null && this.toHost == null) {
+            response.append("554 5.1.0 No valid recipients\r\n");
+        } else if (this.fromHost == null) {
+            response.append("554 5.1.8 Please, identify yourself\r\n");
+        } else if (Boolean.TRUE.equals(this.fromHost) && !this.authenticated) {
+            response.append("530 5.7.0 Authentication required\r\n");
+        } else if (this.toHost == null) {
+            response.append("554 5.1.1 Please, specify a destination mailbox\r\n");
         } else {
             dataInProgress = true;
             // response.append("354 Start mail input; end with <CRLF>.<CRLF>\r\n");
@@ -677,7 +683,7 @@ public class SMTPInstance implements Runnable {
         os.write(response.toString().getBytes(ASCII));
         os.flush();
 
-        if( dataInProgress ) {
+        if (dataInProgress) {
             consumeData();
         }
 
@@ -716,7 +722,7 @@ public class SMTPInstance implements Runnable {
         StringBuilder response = new StringBuilder();
 
         response.append("221-2.0.0 Thank you for your cooperation\r\n");
-        response.append("221-2.0.0 "+this.localhost+" Service closing transmission channel\r\n");
+        response.append("221-2.0.0 " + this.localhost + " Service closing transmission channel\r\n");
         response.append("221 2.0.0 Goodbye\r\n");
 
         slog(response);
@@ -729,11 +735,12 @@ public class SMTPInstance implements Runnable {
 
     private void close() {
         try {
-            if(!this.closed) {
+            if (!this.closed) {
                 this.closed = true;
                 socket.close();
             }
-        } catch(IOException e) {}
+        } catch (IOException e) {
+        }
 
         log("Connection closed");
     }
@@ -741,9 +748,9 @@ public class SMTPInstance implements Runnable {
     private void consumeData() throws IOException {
         final ByteArrayOutputStream data = new ByteArrayOutputStream();
 
-        int[] control = {-1, -1, -1, -1, -1};
+        int[] control = { -1, -1, -1, -1, -1 };
         int reader = -1;
-        while((reader = is.read()) != -1) {
+        while ((reader = is.read()) != -1) {
 
             control[0] = control[1];
             control[1] = control[2];
@@ -751,16 +758,15 @@ public class SMTPInstance implements Runnable {
             control[3] = control[4];
             control[4] = reader;
 
-            if(    control[0] == '\r' 
-                && control[1] == '\n'  
-                && control[2] == '.'  
-                && control[3] == '\r'  
-                && control[4] == '\n'  
-            ) {
+            if (control[0] == '\r'
+                    && control[1] == '\n'
+                    && control[2] == '.'
+                    && control[3] == '\r'
+                    && control[4] == '\n') {
                 data.flush();
                 dataReceived(data);
                 break;
-            } 
+            }
 
             data.write(reader);
 
@@ -771,28 +777,28 @@ public class SMTPInstance implements Runnable {
     private byte dataReceived(final ByteArrayOutputStream rawData) throws IOException {
         final StringBuilder response = new StringBuilder();
 
-        // Queuing only if this server is a relay, otherwise (final destination), persist data
+        // Queuing only if this server is a relay, otherwise (final destination),
+        // persist data
         response.append("250 2.6.0 Message accepted\r\n");
 
         os.write(response.toString().getBytes(ASCII));
         os.flush();
 
-        final String hash = UUID.randomUUID().toString().replaceAll("\\-","");
+        final String hash = UUID.randomUUID().toString().replaceAll("\\-", "");
 
-        final File file = new File(this.logFolder, "mail-"+hash+".out");
+        final File file = new File(this.logFolder, "mail-" + hash + ".out");
 
         try (OutputStream outData = new FileOutputStream(file)) {
             final byte[] receivedFrom = String.format(
-                "Received: from %s (%s)\n", 
-                this.clientHost,
-                this.clientAddress
-            ).getBytes(ASCII);
+                    "Received: from %s (%s)\n",
+                    this.clientHost,
+                    this.clientAddress).getBytes(ASCII);
 
             outData.write(receivedFrom);
 
             final byte[] deliveryDate = String
-                .format("X-Delivery-Date: %s\n", this.timestamp)
-                .getBytes(ASCII);
+                    .format("X-Delivery-Date: %s\n", this.timestamp)
+                    .getBytes(ASCII);
 
             outData.write(deliveryDate);
 
@@ -800,7 +806,8 @@ public class SMTPInstance implements Runnable {
 
             outData.flush();
 
-        } catch(IOException e) { }
+        } catch (IOException e) {
+        }
 
         log("--- Data hash: " + hash + " ---");
 
@@ -811,36 +818,45 @@ public class SMTPInstance implements Runnable {
         private final String fullname;
         private final String user;
         private final String domain;
+
         Mailbox(final String fullname, final String user, final String domain) {
             this.fullname = fullname;
             this.user = user;
             this.domain = domain;
         }
+
         Mailbox(final String user, final String domain) {
             this.fullname = "";
             this.user = user;
             this.domain = domain;
         }
+
         Mailbox(final String email) {
             this.fullname = "";
             this.user = email.substring(0, email.indexOf('@'));
-            this.domain = email.substring(email.indexOf('@')+1);
+            this.domain = email.substring(email.indexOf('@') + 1);
         }
+
         public String getFullname() {
             return fullname;
         }
+
         public String getUser() {
             return user;
         }
+
         public String getDomain() {
             return domain;
         }
+
         public String getEmail() {
-            return user+"@"+domain;
+            return user + "@" + domain;
         }
+
         public String getFullEmail() {
             return this.fullname + " <" + this.getEmail() + ">";
         }
+
         public boolean is(final String email) {
             return getEmail().equals(email);
         }
