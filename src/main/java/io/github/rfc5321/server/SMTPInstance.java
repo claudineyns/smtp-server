@@ -477,7 +477,6 @@ public class SMTPInstance implements Runnable {
                 response.append("535 5.7.8  Authentication credentials invalid\r\n");
             }
         }
-
         slog(response);
 
         os.write(response.toString().getBytes(ASCII));
@@ -806,8 +805,7 @@ public class SMTPInstance implements Runnable {
 
             outData.flush();
 
-        } catch (IOException e) {
-        }
+        } catch (IOException e) { /***/ }
 
         log("--- Data hash: " + hash + " ---");
 
