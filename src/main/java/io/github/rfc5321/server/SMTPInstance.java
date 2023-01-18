@@ -586,6 +586,7 @@ public class SMTPInstance implements Runnable {
         if (Boolean.TRUE.equals(fromHost) && !authenticated) {
             response.append("530 5.7.0 Authentication required\r\n");
         } else {
+            this.recipients.clear();
             response.append(String.format("250 2.1.0 <%s>: Originator OK\r\n", this.sender.getEmail()));
         }
         slog(response);
@@ -706,10 +707,11 @@ public class SMTPInstance implements Runnable {
         this.authenticated = false;
         this.fromHost = null;
         this.toHost = null;
+        this.recipients.clear();
 
         final StringBuilder response = new StringBuilder();
 
-        response.append("250 2.0.0 OK\r\n");
+        response.append("250 2.1.0 OK\r\n");
         slog(response);
 
         os.write(response.toString().getBytes(ASCII));
