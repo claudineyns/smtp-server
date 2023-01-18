@@ -290,6 +290,8 @@ public class SMTPInstance implements Runnable {
      * https://www.rfc-editor.org/rfc/rfc2821#page-45
      */
 
+    private String remoteHost;
+
     private byte ehlo(final String statement, final byte[] raw) throws IOException {
         final StringBuilder response = new StringBuilder();
 
@@ -298,11 +300,12 @@ public class SMTPInstance implements Runnable {
         // Validate Client host
         try {
             Inet4Address.getByName(host);
+            this.remoteHost = host;
         } catch(UnknownHostException e) {
             return unavailable();
         }
 
-        response.append("250-" + this.localhost + " greets " + host + "\r\n");
+        response.append("250-" + this.localhost + " greets " + this.remoteHost + "\r\n");
         response.append("250-HELP\r\n");
         response.append("250-AUTH PLAIN LOGIN\r\n");
         response.append("250-ENHANCEDSTATUSCODES\r\n");
@@ -582,6 +585,10 @@ public class SMTPInstance implements Runnable {
     private Mailbox sender = null;
 
     private byte mailFrom(final String statement, final byte[] raw) throws IOException {
+        if(this.remoteHost == null) {
+            return introductionMissing();
+        }
+
         final String mailbox = statement.substring(10);
 
         String name = "";
@@ -597,6 +604,7 @@ public class SMTPInstance implements Runnable {
         final String domain = email.substring(email.indexOf('@') + 1).toLowerCase();
         final Mailbox sender = new Mailbox(name, user, domain);
 
+        this.fromHost = Boolean.FALSE;
         this.whiteList
                 .stream()
                 .filter(host -> sender.getDomain().equals(host.toLowerCase()))
@@ -609,6 +617,7 @@ public class SMTPInstance implements Runnable {
             response.append("530 5.7.0 Authentication required\r\n");
         } else {
             this.recipients.clear();
+            this.toHost = null;
             this.sender = sender;
             response.append(String.format("250 2.1.0 <%s>: Originator OK\r\n", this.sender.getEmail()));
         }
@@ -624,6 +633,10 @@ public class SMTPInstance implements Runnable {
     private List<Mailbox> recipients = new LinkedList<>();
 
     private byte rcptTo(final String statement, final byte[] raw) throws IOException {
+        if(this.remoteHost == null) {
+            return introductionMissing();
+        }
+
         final String mailbox = statement.substring(statement.indexOf('<'));
 
         String name = "";
@@ -640,6 +653,7 @@ public class SMTPInstance implements Runnable {
 
         final Mailbox recipient = new Mailbox(name, user, domain);
 
+        this.toHost = Boolean.FALSE;
         this.whiteList
                 .stream()
                 .filter(host -> recipient.getDomain().equals(host))
@@ -648,8 +662,8 @@ public class SMTPInstance implements Runnable {
 
         final StringBuilder response = new StringBuilder();
 
-        if (this.fromHost == null) {
-            response.append("500 5.7.0 Please, identify yourself\r\n");
+        if (this.sender == null) {
+            response.append("554 5.7.0 Please, identify yourself\r\n");
         } else if (Boolean.FALSE.equals(fromHost) && Boolean.FALSE.equals(toHost)) {
             toHost = null;
             // response.append("551-5.7.1 You've been a naughty guy, right?\r\n");
@@ -682,6 +696,10 @@ public class SMTPInstance implements Runnable {
     // https://stackoverflow.com/questions/25710599/content-transfer-encoding-7bit-or-8-bit
 
     private byte data() throws IOException {
+        if(this.remoteHost == null) {
+            return introductionMissing();
+        }
+
         boolean dataInProgress = false;
 
         final StringBuilder response = new StringBuilder();
@@ -689,7 +707,7 @@ public class SMTPInstance implements Runnable {
         if (this.fromHost == null && this.toHost == null) {
             response.append("554 5.1.0 No valid recipients\r\n");
         } else if (this.fromHost == null) {
-            response.append("554 5.1.8 Please, specify your origin mailbox\r\n");
+            response.append("554 5.1.8 Please, identify yourself\r\n");
         } else if (this.toHost == null) {
             response.append("554 5.1.1 Please, specify a destination mailbox\r\n");
         } else {
@@ -739,7 +757,7 @@ public class SMTPInstance implements Runnable {
     }
 
     private byte quit() throws IOException {
-        StringBuilder response = new StringBuilder();
+        final StringBuilder response = new StringBuilder();
 
         response.append("221-2.0.0 Thank you for your cooperation\r\n");
         response.append("221-2.0.0 " + this.localhost + " Service closing transmission channel\r\n");
@@ -751,6 +769,18 @@ public class SMTPInstance implements Runnable {
         os.flush();
 
         throw new IOException("Connection closed by client");
+    }
+
+    private byte introductionMissing() throws IOException {
+        final StringBuilder response = new StringBuilder();
+
+        response.append("554 5.4.0 Please, introduce yourself\r\n");        
+        slog(response);
+
+        os.write(response.toString().getBytes(ASCII));
+        os.flush();
+
+        return 0;
     }
 
     private void close() {
