@@ -45,6 +45,7 @@ public class MailTest {
         System.setProperty("smtp.fqdn.whitelist", "example.com");
         System.setProperty("smtp.port", Integer.toString(port));
 
+        System.out.println("[DEBUG] Attempt to connect on port " + port);
         smtp = new SMTPAgent().start();
         Thread.sleep(2000);
     }
@@ -135,10 +136,10 @@ public class MailTest {
         Thread.sleep(500);
     }
 
-    void response(final InputStream in) throws Exception {
-        String data = content(in); data.length();
-        // System.out.println("\n[INFO] CLIENT RESPONSE\n" + data);
+    String response(final InputStream in) throws Exception {
+        String data = content(in);
         Thread.sleep(500);
+        return data;
     }
 
     static final int read_timeout = 1000;
@@ -271,7 +272,7 @@ public class MailTest {
             request("MAIL FROM:<>\r\n", out);
             response(in);
 
-            request("RCPT TO:<postmaster@example.net>\r\n", out);
+            request("RCPT TO:<postmaster@example.com>\r\n", out);
             response(in);
 
             request("QUIT\r\n", out);
@@ -296,6 +297,83 @@ public class MailTest {
             response(in);
 
             request("EHLO invalid-domain-example.net\r\n", out);
+            response(in);
+
+            request("QUIT\r\n", out);
+            response(in);
+
+        }
+    }
+
+    @Test
+    public void destinationMailboxSuccess() throws Exception {
+        final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
+
+        try (final Socket socket = new Socket()) {
+
+            socket.setSoTimeout(read_timeout);
+            socket.connect(socketAddress, connect_timeout);
+
+            Thread.sleep(500);
+
+            final InputStream in = socket.getInputStream();
+            final OutputStream out = socket.getOutputStream();
+
+            response(in);
+
+            request("EHLO example.net\r\n", out);
+            response(in);
+
+            request("MAIL FROM:<alice@example.net>\r\n", out);
+            response(in);
+
+            request("RCPT TO:<bob@example.com>\r\n", out);
+            response(in);
+
+            request("QUIT\r\n", out);
+            response(in);
+
+        }
+    }
+
+    @Test
+    public void sendDataIncompleteMailboxesSuccess() throws Exception {
+        final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
+
+        try (final Socket socket = new Socket()) {
+
+            socket.setSoTimeout(read_timeout);
+            socket.connect(socketAddress, connect_timeout);
+
+            Thread.sleep(500);
+
+            final InputStream in = socket.getInputStream();
+            final OutputStream out = socket.getOutputStream();
+
+            response(in);
+
+            request("MAIL FROM: <alice@example.net>\r\n", out);
+            response(in);
+
+            request("RCPT TO: <bob@example.com>\r\n", out);
+            response(in);
+
+            request("DATA\r\n", out);
+            response(in);
+
+            request("EHLO example.net\r\n", out);
+            response(in);
+
+            request("DATA\r\n", out);
+            response(in);
+
+            request("RCPT TO: <bob@example.com>\r\n", out);
+            response(in);
+
+            request("MAIL FROM: <alice@example.net>\r\n", out);
+            response(in);
+
+            request("DATA\r\n", out);
             response(in);
 
             request("QUIT\r\n", out);
