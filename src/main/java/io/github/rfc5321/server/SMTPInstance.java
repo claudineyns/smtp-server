@@ -290,8 +290,8 @@ public class SMTPInstance implements Runnable {
         response.append("250-AUTH PLAIN LOGIN\r\n");
         response.append("250-ENHANCEDSTATUSCODES\r\n");
         response.append("250-8BITMIME\r\n");
-        response.append("250-BINARYMIME\r\n");
-        response.append("250 CHUNKING\r\n");
+        response.append("250 BINARYMIME\r\n");
+        // response.append("250 CHUNKING\r\n");
 
         slog(response);
 
