@@ -6,7 +6,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.Inet4Address;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
@@ -267,6 +269,14 @@ public class SMTPInstance implements Runnable {
         final StringBuilder response = new StringBuilder();
 
         final String host = statement.substring(5);
+
+        // Validate Client host
+        try {
+            Inet4Address.getByName(host);
+        } catch(UnknownHostException e) {
+            return unavailable();
+        }
+
         response.append("250 " + this.localhost + " greets " + host + "\r\n");
         slog(response);
 
@@ -285,13 +295,20 @@ public class SMTPInstance implements Runnable {
 
         final String host = statement.substring(5);
 
+        // Validate Client host
+        try {
+            Inet4Address.getByName(host);
+        } catch(UnknownHostException e) {
+            return unavailable();
+        }
+
         response.append("250-" + this.localhost + " greets " + host + "\r\n");
         response.append("250-HELP\r\n");
         response.append("250-AUTH PLAIN LOGIN\r\n");
         response.append("250-ENHANCEDSTATUSCODES\r\n");
         response.append("250-8BITMIME\r\n");
-        response.append("250-BINARYMIME\r\n");
-        response.append("250 CHUNKING\r\n");
+        response.append("250 BINARYMIME\r\n");
+        // response.append("250 CHUNKING\r\n");
 
         slog(response);
 
@@ -567,7 +584,7 @@ public class SMTPInstance implements Runnable {
             name = mailbox.substring(0, mailbox.indexOf('<'));
             email = mailbox.substring(mailbox.indexOf('<'));
         }
-        email = email.replaceAll("[<>]", "");
+        email = "<>".equals(email) ? "@" : email.replaceAll("[<>]", "");
 
         final String user = email.substring(0, email.indexOf('@'));
         final String domain = email.substring(email.indexOf('@') + 1).toLowerCase();
@@ -852,7 +869,7 @@ public class SMTPInstance implements Runnable {
         }
 
         public String getEmail() {
-            return user + "@" + domain;
+            return user.isBlank() && domain.isBlank() ? "" : (user + "@" + domain);
         }
 
         public String getFullEmail() {
