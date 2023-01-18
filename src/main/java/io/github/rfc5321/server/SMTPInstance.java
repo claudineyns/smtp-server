@@ -788,15 +788,14 @@ public class SMTPInstance implements Runnable {
         final File file = new File(this.logFolder, "mail-" + hash + ".out");
 
         try (OutputStream outData = new FileOutputStream(file)) {
-            final byte[] receivedFrom = String.format(
-                    "Received: from %s (%s)\n",
-                    this.clientHost,
-                    this.clientAddress).getBytes(ASCII);
+            final byte[] receivedFrom = String
+                    .format("Received: from %s (%s)%s", this.clientHost, this.clientAddress, "\r\n")
+                    .getBytes(ASCII);
 
             outData.write(receivedFrom);
 
             final byte[] deliveryDate = String
-                    .format("X-Delivery-Date: %s\n", this.timestamp)
+                    .format("X-Delivery-Date: %s%s", this.timestamp, "\r\n")
                     .getBytes(ASCII);
 
             outData.write(deliveryDate);
