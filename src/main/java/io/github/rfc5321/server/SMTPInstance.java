@@ -255,7 +255,7 @@ public class SMTPInstance implements Runnable {
     private byte help() throws IOException {
         final StringBuilder response = new StringBuilder();
 
-        response.append("211 EHLO HELO AUTH MAIL RCPT DATA HELP\r\n");
+        response.append("211 EHLO HELO VRFY EXPN AUTH MAIL RCPT DATA HELP\r\n");
 
         os.write(response.toString().getBytes(ASCII));
         os.flush();
