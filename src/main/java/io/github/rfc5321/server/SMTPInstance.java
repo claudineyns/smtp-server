@@ -362,6 +362,8 @@ public class SMTPInstance implements Runnable {
                 .append(Base64.getEncoder().encodeToString(usernameLabel.getBytes(ASCII)))
                 .append("\r\n");
 
+        logger.info("S: Awaiting for " + usernameLabel);
+
         os.write(response.toString().getBytes(ASCII));
         os.flush();
 
@@ -373,7 +375,7 @@ public class SMTPInstance implements Runnable {
     private byte authLogin(String statement, byte[] raw) throws IOException {
         final String username = statement.substring(11);
 
-        if (username.isEmpty()) {
+        if (username.isBlank()) {
             return authLogin();
         }
 
@@ -393,6 +395,7 @@ public class SMTPInstance implements Runnable {
 
     private byte validateAuthLoginCredential(String username) throws IOException {
         this.username = new String(Base64.getDecoder().decode(username), ASCII);
+        logger.info("C: Username: " + this.username);
 
         StringBuilder response = new StringBuilder();
 
@@ -402,6 +405,8 @@ public class SMTPInstance implements Runnable {
                 .append(Base64.getEncoder().encodeToString(passwordLabel.getBytes(ASCII)))
                 .append("\r\n");
 
+        logger.info("S: Awaiting for " + passwordLabel);
+                
         os.write(response.toString().getBytes(ASCII));
         os.flush();
 
@@ -413,6 +418,7 @@ public class SMTPInstance implements Runnable {
             response.append("535 5.7.8 Authentication credentials invalid\r\n");
         } else {
             this.password = new String(Base64.getDecoder().decode(password), ASCII);
+            logger.info("C: Password: " + this.password);
 
             if (LOCAL_USERNAME.equals(this.username) && LOCAL_PASSWORD.equals(this.password)) {
                 this.authenticated = true;
@@ -589,13 +595,11 @@ public class SMTPInstance implements Runnable {
 
         final String user = email.substring(0, email.indexOf('@'));
         final String domain = email.substring(email.indexOf('@') + 1).toLowerCase();
+        final Mailbox sender = new Mailbox(name, user, domain);
 
-        this.sender = new Mailbox(name, user, domain);
-
-        this.fromHost = Boolean.valueOf(this.whiteList.isEmpty());
         this.whiteList
                 .stream()
-                .filter(host -> this.sender.getDomain().equals(host.toLowerCase()))
+                .filter(host -> sender.getDomain().equals(host.toLowerCase()))
                 .findFirst()
                 .ifPresent(q -> fromHost = Boolean.TRUE);
 
@@ -605,6 +609,7 @@ public class SMTPInstance implements Runnable {
             response.append("530 5.7.0 Authentication required\r\n");
         } else {
             this.recipients.clear();
+            this.sender = sender;
             response.append(String.format("250 2.1.0 <%s>: Originator OK\r\n", this.sender.getEmail()));
         }
         slog(response);
@@ -634,9 +639,7 @@ public class SMTPInstance implements Runnable {
         final String domain = email.substring(email.indexOf('@') + 1).toLowerCase();
 
         final Mailbox recipient = new Mailbox(name, user, domain);
-        this.recipients.add(new Mailbox(name, user, domain));
 
-        this.toHost = Boolean.valueOf(this.whiteList.isEmpty());
         this.whiteList
                 .stream()
                 .filter(host -> recipient.getDomain().equals(host))
@@ -647,14 +650,13 @@ public class SMTPInstance implements Runnable {
 
         if (this.fromHost == null) {
             response.append("500 5.7.0 Please, identify yourself\r\n");
-        } else if (Boolean.TRUE.equals(fromHost) && !authenticated) {
-            response.append("530 5.7.0 Authentication required\r\n");
         } else if (Boolean.FALSE.equals(fromHost) && Boolean.FALSE.equals(toHost)) {
             toHost = null;
-            response.append("551-5.7.1 You've been a naughty guy, right?\r\n");
+            // response.append("551-5.7.1 You've been a naughty guy, right?\r\n");
             response.append("551-5.7.1 Forwarding to remote hosts is not acceptable\r\n");
             response.append("551 5.7.1 Select another host to act as your forwarder\r\n");
         } else {
+            this.recipients.add(recipient);
             response.append(String.format("250 2.1.0 <%s>: Recipient OK\r\n", recipient.getEmail()));
         }
         slog(response);
@@ -687,15 +689,13 @@ public class SMTPInstance implements Runnable {
         if (this.fromHost == null && this.toHost == null) {
             response.append("554 5.1.0 No valid recipients\r\n");
         } else if (this.fromHost == null) {
-            response.append("554 5.1.8 Please, identify yourself\r\n");
-        } else if (Boolean.TRUE.equals(this.fromHost) && !this.authenticated) {
-            response.append("530 5.7.0 Authentication required\r\n");
+            response.append("554 5.1.8 Please, specify your origin mailbox\r\n");
         } else if (this.toHost == null) {
             response.append("554 5.1.1 Please, specify a destination mailbox\r\n");
         } else {
             dataInProgress = true;
             // response.append("354 Start mail input; end with <CRLF>.<CRLF>\r\n");
-            response.append("354 Send 8BITMIME message, ending in <CRLF>.<CRLF>\r\n");
+            response.append("354 I am ready, send 8BITMIME message, ending in <CRLF>.<CRLF>\r\n");
         }
         slog(response);
 
