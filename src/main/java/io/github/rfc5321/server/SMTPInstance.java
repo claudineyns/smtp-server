@@ -6,7 +6,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.Inet4Address;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
@@ -267,6 +269,14 @@ public class SMTPInstance implements Runnable {
         final StringBuilder response = new StringBuilder();
 
         final String host = statement.substring(5);
+
+        // Validate Client host
+        try {
+            Inet4Address.getByName(host);
+        } catch(UnknownHostException e) {
+            return unavailable();
+        }
+
         response.append("250 " + this.localhost + " greets " + host + "\r\n");
         slog(response);
 
@@ -284,6 +294,13 @@ public class SMTPInstance implements Runnable {
         final StringBuilder response = new StringBuilder();
 
         final String host = statement.substring(5);
+
+        // Validate Client host
+        try {
+            Inet4Address.getByName(host);
+        } catch(UnknownHostException e) {
+            return unavailable();
+        }
 
         response.append("250-" + this.localhost + " greets " + host + "\r\n");
         response.append("250-HELP\r\n");
@@ -479,6 +496,8 @@ public class SMTPInstance implements Runnable {
         }
         slog(response);
 
+        slog(response);
+
         os.write(response.toString().getBytes(ASCII));
         os.flush();
 
@@ -566,7 +585,7 @@ public class SMTPInstance implements Runnable {
             name = mailbox.substring(0, mailbox.indexOf('<'));
             email = mailbox.substring(mailbox.indexOf('<'), mailbox.indexOf('>')+1);
         }
-        email = email.replaceAll("[<>]", "");
+        email = "<>".equals(email) ? "@" : email.replaceAll("[<>]", "");
 
         final String user = email.substring(0, email.indexOf('@'));
         final String domain = email.substring(email.indexOf('@') + 1).toLowerCase();
@@ -585,6 +604,7 @@ public class SMTPInstance implements Runnable {
         if (Boolean.TRUE.equals(fromHost) && !authenticated) {
             response.append("530 5.7.0 Authentication required\r\n");
         } else {
+            this.recipients.clear();
             response.append(String.format("250 2.1.0 <%s>: Originator OK\r\n", this.sender.getEmail()));
         }
         slog(response);
@@ -705,10 +725,11 @@ public class SMTPInstance implements Runnable {
         this.authenticated = false;
         this.fromHost = null;
         this.toHost = null;
+        this.recipients.clear();
 
         final StringBuilder response = new StringBuilder();
 
-        response.append("250 2.0.0 OK\r\n");
+        response.append("250 2.1.0 OK\r\n");
         slog(response);
 
         os.write(response.toString().getBytes(ASCII));
@@ -847,7 +868,7 @@ public class SMTPInstance implements Runnable {
         }
 
         public String getEmail() {
-            return user + "@" + domain;
+            return user.isBlank() && domain.isBlank() ? "" : (user + "@" + domain);
         }
 
         public String getFullEmail() {
