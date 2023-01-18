@@ -656,7 +656,7 @@ public class SMTPInstance implements Runnable {
         this.toHost = Boolean.FALSE;
         this.whiteList
                 .stream()
-                .filter(host -> recipient.getDomain().equals(host))
+                .filter(host -> "relay".equals(host) || recipient.getDomain().equals(host))
                 .findFirst()
                 .ifPresent(host -> toHost = Boolean.TRUE);
 
