@@ -257,7 +257,7 @@ public class SMTPInstance implements Runnable {
     private byte help() throws IOException {
         final StringBuilder response = new StringBuilder();
 
-        response.append("211 EHLO HELO AUTH MAIL RCPT DATA HELP\r\n");
+        response.append("211 EHLO HELO VRFY EXPN AUTH MAIL RCPT DATA HELP\r\n");
 
         os.write(response.toString().getBytes(ASCII));
         os.flush();
@@ -494,6 +494,7 @@ public class SMTPInstance implements Runnable {
                 response.append("535 5.7.8  Authentication credentials invalid\r\n");
             }
         }
+        slog(response);
 
         slog(response);
 
@@ -582,7 +583,7 @@ public class SMTPInstance implements Runnable {
 
         if (mailbox.contains(" ")) {
             name = mailbox.substring(0, mailbox.indexOf('<'));
-            email = mailbox.substring(mailbox.indexOf('<'));
+            email = mailbox.substring(mailbox.indexOf('<'), mailbox.indexOf('>')+1);
         }
         email = "<>".equals(email) ? "@" : email.replaceAll("[<>]", "");
 
@@ -808,15 +809,14 @@ public class SMTPInstance implements Runnable {
         final File file = new File(this.logFolder, "mail-" + hash + ".out");
 
         try (OutputStream outData = new FileOutputStream(file)) {
-            final byte[] receivedFrom = String.format(
-                    "Received: from %s (%s)\n",
-                    this.clientHost,
-                    this.clientAddress).getBytes(ASCII);
+            final byte[] receivedFrom = String
+                    .format("Received: from %s (%s)%s", this.clientHost, this.clientAddress, "\r\n")
+                    .getBytes(ASCII);
 
             outData.write(receivedFrom);
 
             final byte[] deliveryDate = String
-                    .format("X-Delivery-Date: %s\n", this.timestamp)
+                    .format("X-Delivery-Date: %s%s", this.timestamp, "\r\n")
                     .getBytes(ASCII);
 
             outData.write(deliveryDate);
@@ -825,8 +825,7 @@ public class SMTPInstance implements Runnable {
 
             outData.flush();
 
-        } catch (IOException e) {
-        }
+        } catch (IOException e) { /***/ }
 
         log("--- Data hash: " + hash + " ---");
 
