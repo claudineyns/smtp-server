@@ -109,9 +109,6 @@ public class MailTest {
 
         message.setContent(multipart);
         Transport.send(message);                
-        
-        // message.setText(text.toString());
-        // Transport.send(message);
     }
 
     static final Charset ASCII = StandardCharsets.US_ASCII;
@@ -130,16 +127,13 @@ public class MailTest {
     }
 
     void request(final String request, final OutputStream out) throws Exception {
-        // System.out.println("[INFO] CLIENT REQUEST\n" + request);
         out.write(request.getBytes(ASCII));
         out.flush();
         Thread.sleep(500);
     }
 
     String response(final InputStream in) throws Exception {
-        String data = content(in);
-        Thread.sleep(500);
-        return data;
+        return content(in);
     }
 
     static final int read_timeout = 1000;
