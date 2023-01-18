@@ -564,7 +564,7 @@ public class SMTPInstance implements Runnable {
 
         if (mailbox.contains(" ")) {
             name = mailbox.substring(0, mailbox.indexOf('<'));
-            email = mailbox.substring(mailbox.indexOf('<'));
+            email = mailbox.substring(mailbox.indexOf('<'), mailbox.indexOf('>')+1);
         }
         email = email.replaceAll("[<>]", "");
 
