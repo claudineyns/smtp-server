@@ -1,4 +1,4 @@
-package io.github.rfc5321.server;
+package io.github.rfc5321.workers;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -21,15 +21,15 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.logging.Logger;
+
 import java.util.regex.Pattern;
 
-import io.github.rfc5321.logging.LoggerService;
+import org.jboss.logging.Logger;
 
-public class SMTPInstance implements Runnable {
+public class SMTPWorker implements Runnable {
     private static final Charset ASCII = StandardCharsets.US_ASCII;
 
-    private final Logger logger = LoggerService.getLogger(getClass().getSimpleName());
+    private final Logger logger = Logger.getLogger(getClass());
 
     @SuppressWarnings("unused")
     private final UUID sessionId;
@@ -47,7 +47,7 @@ public class SMTPInstance implements Runnable {
 
     private final List<String> whiteList = new LinkedList<>();
 
-    public SMTPInstance(final Socket socket, final UUID id, final List<String> whiteList) {
+    public SMTPWorker(final Socket socket, final UUID id, final List<String> whiteList) {
         this.socket = socket;
         this.sessionId = id;
         this.whiteList.addAll(whiteList);

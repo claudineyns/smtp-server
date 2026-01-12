@@ -1,112 +1,128 @@
 package io.github.rfc5321.server;
 
 import java.io.IOException;
+
 import java.net.Inet4Address;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
+import java.net.UnknownHostException;
 
-import io.github.rfc5321.logging.LoggerService;
+import org.jboss.logging.Logger;
 
-import java.util.Arrays;
+import io.github.rfc5321.configs.Configs;
+import io.github.rfc5321.configs.UtilConfigs;
+import io.github.rfc5321.utils.AppUtils;
+import io.github.rfc5321.workers.SMTPWorker;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+@ApplicationScoped
 public class SMTPAgent {
-	static final SMTPAgent INSTANCE = new SMTPAgent();
+	@Inject
+	Logger logger;
 
-	public static void main(String[] args) throws IOException {
-		INSTANCE.start();
-	}
-
-	private final Logger logger = LoggerService.getLogger(getClass().getSimpleName());
+	@Inject
+	Configs configs;
 
 	private ServerSocket server;
 
-	public SMTPAgent start() throws IOException {
-		final Thread shutdown = new Thread(() -> {
-			this.stopService();
-			logger.info("Service terminated.");
-		});
-		Runtime.getRuntime().addShutdownHook(shutdown);
-
-		Executors.newSingleThreadExecutor().submit(() -> startService());
-
-		return this;
+	public void start()
+	{
+		Executors.newSingleThreadExecutor().submit(() -> startServer());
 	}
 
-	public void stop() {
-		stopService();
+	public void stop()
+	{
+		stopServer();
 	}
 
-	private void startService() {
+	private void startServer()
+	{
 		try {
-			listen();
+			mountServers();
 		} catch (IOException e) {
-			stopService();
+			stopServer();
 		}
 	}
 
-	private void stopService() {
+	private void stopServer()
+	{
 		try {
 			if(this.server != null && !this.server.isClosed()) {
 				this.server.close();
 			}
-		} catch (IOException e) { /***/ }
+		} catch (IOException e) {
+			logger.warnf(e.getMessage());
+		}
 	}
 
-	private void listen() throws IOException {
-        final String serviceHost = Optional
-            .ofNullable(System.getenv("SMTP_HOSTNAME"))
-            .orElse(Optional
-                .ofNullable(System.getProperty("smtp.hostname"))
-                .orElse(Optional
-					.ofNullable(System.getenv("HOSTNAME"))
-					.orElse(Inet4Address.getLocalHost().getHostName()))
-        );
+	private String getLocalhostName()
+	{
+		try
+		{
+			return Inet4Address.getLocalHost().getHostName();
+		} catch(UnknownHostException failure)
+		{
+			throw new IllegalStateException(failure);
+		}
+	}
 
-		final String servicePort = Optional
-				.ofNullable(System.getenv("SMTP_PORT"))
-				.orElse(Optional
-						.ofNullable(System.getProperty("smtp.port"))
-						.orElse("25"));
+	static final Integer DEFAULT_SMTP_PORT = 25;
 
-		final String serviceWhitelist = Optional
-				.ofNullable(System.getenv("SMTP_FQDN_WHITELIST"))
-				.orElse(Optional
-						.ofNullable(System.getProperty("smtp.fqdn.whitelist"))
-						.orElse("localhost"));
+	private String serviceHost;
 
-		final List<String> whitelist = Arrays
-			.asList(serviceWhitelist.split("\\,"))
-			.stream().filter(fqdn -> ! fqdn.isBlank())
-			.collect(Collectors.toList());
+	private Integer servicePort;
 
-		final Inet4Address address = (Inet4Address) Inet4Address.getByName(serviceHost);
-		final InetSocketAddress socketAddress = new InetSocketAddress(address, Integer.parseInt(servicePort));
+	private List<String> whitelist;
+
+	private ExecutorService threads = Executors.newVirtualThreadPerTaskExecutor();
+
+	private void mountServers() throws IOException {
+        this.serviceHost = configs.server().hostname()
+			.or( () -> UtilConfigs.OPTIONAL_HOSTNAME )
+			.orElseGet(this::getLocalhostName);
+
+		this.servicePort = configs.server().port().orElse(DEFAULT_SMTP_PORT);
+
+		this.whitelist = AppUtils.listOf
+		(
+			configs.server().fqdn().flatMap(Configs.Server.Fqdn::whitelist)
+		)
+		.orElseGet(()-> List.of("localhost"));
+
+		final var address = InetAddress.getByName(serviceHost);
+		final var socketAddress = new InetSocketAddress(address, servicePort);
 
 		this.server = new ServerSocket();
 		this.server.bind(socketAddress);
 
-		logger.info("--- Version 0.0.1 ---");
-		logger.info(String.format("Started on host %s and port %s", serviceHost, servicePort));
+		final var executorService = Executors.newFixedThreadPool(2);
+
+		executorService.submit(() -> this.startInsecureServer());
+	}
+
+	private void startInsecureServer()
+	{
+		logger.infof("Started on host %s and port %s", serviceHost, servicePort);
 
 		while (true) {
 			Socket client = null;
 			try {
 				client = server.accept();
-				logger.info("Connection received.");
+				logger.trace("--- Server got new connection ---");
 			} catch (IOException e) {
 				break;
 			}
 
-			Executors.newSingleThreadExecutor().submit(new SMTPInstance(client, UUID.randomUUID(), whitelist));
+			this.threads.submit(new SMTPWorker(client, UUID.randomUUID(), whitelist));
 		}
-
 	}
 
 }
