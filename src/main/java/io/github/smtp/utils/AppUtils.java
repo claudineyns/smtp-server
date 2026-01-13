@@ -1,4 +1,4 @@
-package io.github.rfc5321.utils;
+package io.github.smtp.utils;
 
 import java.util.List;
 import java.util.Optional;

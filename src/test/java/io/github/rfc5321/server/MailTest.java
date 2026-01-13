@@ -20,50 +20,27 @@
 // import org.junit.jupiter.api.TestInstance;
 // import org.junit.jupiter.api.TestInstance.Lifecycle;
 
-// import jakarta.mail.Authenticator;
-// import jakarta.mail.BodyPart;
-// import jakarta.mail.Message;
-// import jakarta.mail.Multipart;
-// import jakarta.mail.PasswordAuthentication;
-// import jakarta.mail.Session;
-// import jakarta.mail.Transport;
-// import jakarta.mail.internet.InternetAddress;
-// import jakarta.mail.internet.MimeBodyPart;
-// import jakarta.mail.internet.MimeMessage;
-// import jakarta.mail.internet.MimeMultipart;
+// import com.google.inject.Inject;
+
+// import io.github.rfc5321.configs.Configs;
 
 // @TestInstance(Lifecycle.PER_CLASS)
 // public class MailTest {
-//     static final String hostname = "localhost";
-//     static final int port = 50000 + new Random().nextInt(1000);
 
-//     SMTPAgent smtp;
-
-//     @BeforeAll
-//     public void startup() throws Exception {
-//         System.setProperty("smtp.hostname", hostname);
-//         System.setProperty("smtp.fqdn.whitelist", "example.com");
-//         System.setProperty("smtp.port", Integer.toString(port));
-
-//         System.out.println("[DEBUG] Attempt to connect on port " + port);
-//         smtp = new SMTPAgent().start();
-//         Thread.sleep(2000);
-//     }
-
-//     @AfterAll
-//     public void terminate() throws Exception {
-//         smtp.stop();
-//     }
+//     @Inject
+//     Configs configs;
 
 //     @Test
 //     public void sendMailSuccess() throws Exception {
 //         final String username = "postmaster@example.com";
 //         final String password = "myp@77";
 
+//         final String port = configs.server().port().map(String::valueOf).orElse("25");
+
 //         final Properties prop = new Properties();
 //         prop.put("mail.smtp.host", "localhost");
 //         prop.put("mail.smtp.auth", "true");
-//         prop.put("mail.smtp.port", Integer.toString(port));
+//         prop.put("mail.smtp.port", port);
 
 //         // prop.put("mail.smtp.starttls.enable", "true"); // TLS
 

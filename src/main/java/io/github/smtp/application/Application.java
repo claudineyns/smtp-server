@@ -1,8 +1,8 @@
-package io.github.rfc5321.application;
+package io.github.smtp.application;
 
 import org.jboss.logging.Logger;
 
-import io.github.rfc5321.server.SMTPAgent;
+import io.github.smtp.server.SMTPAgent;
 import io.quarkus.runtime.Quarkus;
 import io.quarkus.runtime.QuarkusApplication;
 import io.quarkus.runtime.annotations.QuarkusMain;

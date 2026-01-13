@@ -1,4 +1,4 @@
-package io.github.rfc5321.server;
+package io.github.smtp.server;
 
 import java.io.IOException;
 
@@ -11,10 +11,10 @@ import java.net.UnknownHostException;
 
 import org.jboss.logging.Logger;
 
-import io.github.rfc5321.configs.Configs;
-import io.github.rfc5321.configs.UtilConfigs;
-import io.github.rfc5321.utils.AppUtils;
-import io.github.rfc5321.workers.SMTPWorker;
+import io.github.smtp.configs.Configs;
+import io.github.smtp.configs.UtilConfigs;
+import io.github.smtp.utils.AppUtils;
+import io.github.smtp.workers.SMTPWorker;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -110,7 +110,7 @@ public class SMTPAgent {
 
 	private void startInsecureServer()
 	{
-		logger.infof("Started on host %s and port %s", serviceHost, servicePort);
+		logger.infof(">>> Server started on host %s and port %s <<<", serviceHost, servicePort);
 
 		while (true) {
 			Socket client = null;
@@ -121,8 +121,13 @@ public class SMTPAgent {
 				break;
 			}
 
-			this.threads.submit(new SMTPWorker(client, UUID.randomUUID(), whitelist));
+			this.threads.submit(
+				new SMTPWorker(client, UUID.randomUUID(), whitelist)
+					.setHostname(this.serviceHost)
+			);
 		}
+
+		logger.trace("--- Server not accepting new connections");
 	}
 
 }
