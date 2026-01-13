@@ -76,7 +76,7 @@ public class SMTPWorker implements Runnable {
     }
 
     public void run()
-    {        
+    {
         processRequest();
     }
 
