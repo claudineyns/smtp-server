@@ -240,7 +240,7 @@ public class MailTest {
             request("MAIL FROM:<>\r\n", out);
             response(in);
 
-            request("RCPT TO:<postmaster@example.com>\r\n", out);
+            request("RCPT TO:<admin@example.com>\r\n", out);
             response(in);
 
             request("QUIT\r\n", out);

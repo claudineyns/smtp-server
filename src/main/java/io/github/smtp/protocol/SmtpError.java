@@ -12,7 +12,7 @@ public enum SmtpError {
     SENDER_MISSING("554", "5.1.0", "Please, identify yourself"),
     DESTINATION_MISSING("554", "5.1.0", "Please, specify a destination mailbox"),
     SENDER_ALREADY_SPECIFIED("503", "5.5.1", "Sender already specified"),
-    UNAVAILABLE("502", "5.0.0", "Unavailable"),
+    UNAVAILABLE("421", "4.0.0", "Service not available, closing transmission channel"),
     INVALID_COMMAND("500", "5.5.1", "Invalid command"),
     INTRODUCTION_MISSING("503", "5.5.1", "Please, introduce yourself"),
     SECURITY_POLICY("550", "5.7.1", "Security policy")
@@ -48,4 +48,9 @@ public enum SmtpError {
     {
         return String.format("%s %s %s", code(), extended(), message());
     }
+
+    public String withHost(final String host)
+    {
+        return String.format("%s %s %s %s", code(), extended(), host, message());
+    }    
 }

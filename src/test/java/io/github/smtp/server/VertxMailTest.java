@@ -56,7 +56,7 @@ public class VertxMailTest {
         final String hostname = configs.server().hostname().orElse("localhost");
         final Integer port = configs.server().port().orElse(25);
 
-        final String username = "postmaster@example.com";
+        final String username = "admin@example.com";
         final String password = "myp@77";
 
         final StringBuilder text = new StringBuilder("");

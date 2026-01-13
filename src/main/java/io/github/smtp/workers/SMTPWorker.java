@@ -59,14 +59,6 @@ public class SMTPWorker implements Runnable {
         final var remoteInetAddress = socket.getInetAddress();
         this.clientHost = remoteInetAddress.getHostAddress();
         this.clientAddress = remoteInetAddress.getHostName();
-
-        if(this.clientAddress.equals(this.clientHost))
-        {
-            logger.debugf("Remote peer: %s", this.clientAddress);
-        } else
-        {
-            logger.debugf("Remote peer: %s [%s]", this.clientAddress, this.clientHost);
-        }
     }
 
     private String hostname;
@@ -84,7 +76,7 @@ public class SMTPWorker implements Runnable {
     }
 
     public void run()
-    {
+    {        
         processRequest();
     }
 
@@ -119,10 +111,19 @@ public class SMTPWorker implements Runnable {
     }
 
     private void process() throws IOException {
+        if(this.clientAddress.equals(this.clientHost))
+        {
+            logger.debugf("Remote peer: %s", this.clientAddress);
+        } else
+        {
+            logger.debugf("Remote peer: %s [%s]", this.clientAddress, this.clientHost);
+        }
+
         socket.setSoTimeout(30000);
 
         is = socket.getInputStream();
         os = socket.getOutputStream();
+
         startPresentation();
         interact();
     }
@@ -253,7 +254,7 @@ public class SMTPWorker implements Runnable {
     }
     /*
      * Reply Codes in Numeric Order
-     * https://www.rfc-editor.org/rfc/rfc2821#page-45
+     * https://www.rfc-editor.org/rfc/rfc5321#section-4.2.3
      */
 
     private String introductionHost;
@@ -308,7 +309,8 @@ public class SMTPWorker implements Runnable {
 
         responses.add("250-" + this.hostname + " greets " + this.introductionHost);
         responses.add("250-HELP");
-        responses.add("250-AUTH PLAIN LOGIN");
+        responses.add("250-AUTH LOGIN PLAIN");
+        responses.add("250-AUTH=LOGIN PLAIN");
         responses.add("250-ENHANCEDSTATUSCODES");
         responses.add("250 8BITMIME");
         //responses.add("250 BINARYMIME");
@@ -345,7 +347,7 @@ public class SMTPWorker implements Runnable {
     private String username;
     private String password;
 
-    static final String LOCAL_USERNAME = "postmaster@example.com";
+    static final String LOCAL_USERNAME = "admin@example.com";
     static final String LOCAL_PASSWORD = "myp@77";
 
     /*
@@ -478,8 +480,8 @@ public class SMTPWorker implements Runnable {
         if (credential.trim().isEmpty()) {
             response.append(SmtpError.INVALID_CREDENTIALS);
         } else {
-            final String validCredential = Base64.getEncoder()
-                    .encodeToString((LOCAL_USERNAME + ":" + LOCAL_PASSWORD).getBytes(StandardCharsets.US_ASCII));
+            final byte[] source = asciiraw('\0' + LOCAL_USERNAME + "\0" + LOCAL_PASSWORD);
+            final String validCredential = Base64.getEncoder().encodeToString(source);
             if (validCredential.equals(credential)) {
                 this.authenticated = true;
                 response.append("235 2.7.0 Authentication Succeeded");
@@ -734,10 +736,12 @@ public class SMTPWorker implements Runnable {
         return 0;
     }
 
+    @SuppressWarnings("unused")
     private byte unavailable() throws IOException {
-        logger.infof("S: %s", SmtpError.UNAVAILABLE);
+        final String message = SmtpError.UNAVAILABLE.withHost(this.hostname);
+        logger.infof("S: %s", message);
 
-        writeLine(os, SmtpError.UNAVAILABLE);
+        writeLine(os, message);
         os.flush();
 
         return 0;
@@ -768,6 +772,7 @@ public class SMTPWorker implements Runnable {
         this.recipients.clear();
 
         final String response = "250 2.0.0 OK";
+
         logger.infof("S: %s", response);
 
         writeLine(os, response);
@@ -777,20 +782,11 @@ public class SMTPWorker implements Runnable {
     }
 
     private byte quit() throws IOException {
-        final List<String> responses = new ArrayList<>();
+        final String response = "221 2.0.0 " + this.hostname + " Service closing transmission channel";
 
-        responses.add("221 2.0.0 " + this.hostname + " Service closing transmission channel");
+        logger.infof("S: %s", response);
 
-        for(final String line: responses)
-        {
-            logger.infof("S: %s", line);
-        }
-
-        for(final String line: responses)
-        {
-            writeLine(os, line);
-        }
-
+        writeLine(os, response);
         os.flush();
 
         throw new IOException("Connection closed by client");
@@ -898,6 +894,7 @@ public class SMTPWorker implements Runnable {
         // Queuing only if this server is a relay, otherwise (final destination),
         // persist data
         final String response = "250 2.6.0 Message accepted";
+        logger.infof("S: %s", response);
 
         writeLine(os, response);
         os.flush();
