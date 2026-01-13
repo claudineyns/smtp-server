@@ -22,8 +22,9 @@ import jakarta.inject.Inject;
 public class RelayTest {
     static final Charset ASCII = StandardCharsets.US_ASCII;
 
-    static final int read_timeout = 1000;
-    static final int connect_timeout = 2000;
+    static final int read_timeout = 250;
+    static final int connect_timeout = 500;
+    static final int start_timeout = 1000;
 
     @Inject
     Configs configs;
@@ -62,7 +63,7 @@ public class RelayTest {
     void request(final String request, final OutputStream out) throws Exception {
         out.write(request.getBytes(ASCII));
         out.flush();
-        Thread.sleep(500);
+        Thread.sleep(250);
     }
 
     String response(final InputStream in) throws Exception {
@@ -75,26 +76,20 @@ public class RelayTest {
         final String hostname = configs.server().hostname().orElse("localhost");
         final Integer port = configs.server().port().orElse(25);
 
-        logger.info("--- wait for server to start ---");
-
         try
         {
-            Thread.sleep(2000);
+            Thread.sleep(start_timeout);
         } catch(InterruptedException failure)
         {
             Thread.currentThread().interrupt();
             throw new Exception(failure.getMessage());
         }
 
-        logger.infof("--- will try connection on host %s and port %d ---", hostname, port);
-
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
             socket.setSoTimeout(read_timeout);
             socket.connect(socketAddress, connect_timeout);
-
-            Thread.sleep(500);
 
             final InputStream in = socket.getInputStream();
             final OutputStream out = socket.getOutputStream();
