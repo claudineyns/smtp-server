@@ -799,6 +799,7 @@ public class SMTPWorker implements Runnable {
                 if( control[3] == '\n' )
                 {
                     data.write(control[3]);
+                    control[3] = -1;
                 }
 
                 continue;
@@ -809,22 +810,39 @@ public class SMTPWorker implements Runnable {
                 if(control[3] == '\r' || control[3] == '\n')
                 {
                     data.write(control[3]);
+                    control[3] = -1;
                 }
 
                 continue;
             }
 
-            if( control[4] == '.' )
+            if(     control[4] == '.'
+                &&  control[3] == '\n'
+                &&  control[2] == '\r' )
             {
-                if( control[2] == '\r' && control[3] == '\n' )
-                {
-                    continue;
-                }
+                continue;
+            }
+
+            if(     control[3] == '.'
+                &&  control[2] == '\n'
+                &&  control[1] == '\r' )
+            {
+                data.write(control[1]);
+                data.write(control[2]);
+                control[1] = -1;
+                control[2] = -1;
+            }
+
+            if( control[2] == '\r' || control[2] == '\n' )
+            {
+                data.write(control[2]);
+                control[2] = -1;
             }
 
             if( control[3] == '\r' || control[3] == '\n' )
             {
                 data.write(control[3]);
+                control[3] = -1;
             }
 
             data.write(reader);
