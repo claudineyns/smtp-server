@@ -21,6 +21,8 @@ import java.util.Locale;
 import java.util.UUID;
 import org.jboss.logging.Logger;
 
+import io.github.smtp.protocol.SmtpError;
+
 public class SMTPWorker implements Runnable {
     private final Logger logger = Logger.getLogger(getClass());
 
@@ -301,11 +303,10 @@ public class SMTPWorker implements Runnable {
     // https://docs.oracle.com/cd/E54932_01/doc.705/e54936/cssg_create_ssl_cert.htm#CSVSG180
 
     private byte startTls() throws IOException {
-        final String response = "454 4.7.0 TLS not available due to temporary reason";
         // final String response = ""220 Ready to start TLS";
-        logger.tracef("S: %s", response);
+        logger.tracef("S: %s", SmtpError.TLS_NOT_AVAILABLE);
 
-        writeLine(os, response);
+        writeLine(os, SmtpError.TLS_NOT_AVAILABLE);
         os.flush();
 
         return 0;
@@ -314,7 +315,6 @@ public class SMTPWorker implements Runnable {
     private boolean authenticated = false;
     private String username;
     private String password;
-    // private boolean authenticated = true;
 
     static final String LOCAL_USERNAME = "postmaster@example.com";
     static final String LOCAL_PASSWORD = "myp@77";
@@ -349,10 +349,9 @@ public class SMTPWorker implements Runnable {
         }
 
         if (username.isBlank()) {
-            final String response = "535 5.7.8 Authentication credentials invalid";
-            logger.infof("S: %s", response);
+            logger.infof("S: %s", SmtpError.INVALID_CREDENTIALS);
 
-            writeLine(os, response);
+            writeLine(os, SmtpError.INVALID_CREDENTIALS);
             os.flush();
 
             return 0;
@@ -378,7 +377,7 @@ public class SMTPWorker implements Runnable {
         final StringBuilder response = new StringBuilder();
 
         if (password.trim().isEmpty()) {
-            response.append("535 5.7.8 Authentication credentials invalid");
+            response.append(SmtpError.INVALID_CREDENTIALS);
         } else {
             this.password = new String(Base64.getDecoder().decode(password), StandardCharsets.US_ASCII);
             logger.info("C: Password: " + this.password);
@@ -387,7 +386,7 @@ public class SMTPWorker implements Runnable {
                 this.authenticated = true;
                 response.append("235 2.7.0 Authentication Succeeded");
             } else {
-                response.append("500 5.7.0 Authentication credentials invalid");
+                response.append(SmtpError.INVALID_CREDENTIALS);
             }
         }
 
@@ -448,15 +447,15 @@ public class SMTPWorker implements Runnable {
         final StringBuilder response = new StringBuilder();
 
         if (credential.trim().isEmpty()) {
-            response.append("535 5.7.8  Authentication credentials invalid");
+            response.append(SmtpError.INVALID_CREDENTIALS);
         } else {
             final String validCredential = Base64.getEncoder()
                     .encodeToString((LOCAL_USERNAME + ":" + LOCAL_PASSWORD).getBytes(StandardCharsets.US_ASCII));
             if (validCredential.equals(credential)) {
                 this.authenticated = true;
-                response.append("235 2.7.0  Authentication Succeeded");
+                response.append("235 2.7.0 Authentication Succeeded");
             } else {
-                response.append("535 5.7.8  Authentication credentials invalid");
+                response.append(SmtpError.INVALID_CREDENTIALS);
             }
         }
 
@@ -469,10 +468,9 @@ public class SMTPWorker implements Runnable {
     }
 
     private byte verifyBadSintax() throws IOException {
-        final String response = "501 5.1.1 Please, provide a mailbox";
-        logger.infof("S: %s", response);
+        logger.infof("S: %s", SmtpError.MAILBOX_MISSING);
 
-        writeLine(os, response);
+        writeLine(os, SmtpError.MAILBOX_MISSING);
         os.flush();
 
         return 0;
@@ -488,7 +486,7 @@ public class SMTPWorker implements Runnable {
         final String mailbox = statement.substring(statement.indexOf(' ') + 1).trim();
 
         if (MAILING_LIST_EXAMPLE.is(mailbox)) {
-            responses.add("550 That is a mailing list, not a user");
+            responses.add(SmtpError.INVALID_MAILING_LIST_AS_USER.toString());
         } else if ((JOHN_EXAMPLE.getUser()).equals(mailbox) || JOHN_EXAMPLE.is(mailbox)) {
             responses.add("250 " + JOHN_EXAMPLE.getFullEmail());
         } else if ((JANE_EXAMPLE.getUser()).equals(mailbox) || JANE_EXAMPLE.is(mailbox)) {
@@ -526,9 +524,9 @@ public class SMTPWorker implements Runnable {
             responses.add("250-" + JOHN_EXAMPLE.getFullEmail());
             responses.add("250 " + JANE_EXAMPLE.getFullEmail());
         } else if ((JOHN_EXAMPLE.getUser()).equals(mailbox) || JOHN_EXAMPLE.is(mailbox)) {
-            responses.add("550 That is a user name, not a mailing list");
+            responses.add(SmtpError.INVALID_USER_AS_MAILING_LIST.toString());
         } else if ((JANE_EXAMPLE.getUser()).equals(mailbox) || JANE_EXAMPLE.is(mailbox)) {
-            responses.add("550 That is a user name, not a mailing list");
+            responses.add(SmtpError.INVALID_USER_AS_MAILING_LIST.toString());
         } else {
             responses.add("252 2.1.0 Unable to verify mailbox for mailing list");
         }
@@ -573,15 +571,15 @@ public class SMTPWorker implements Runnable {
 
         this.fromHost = Boolean.FALSE;
         this.whiteList
-                .stream()
-                .filter(host -> sender.getDomain().equals(host.toLowerCase()))
-                .findFirst()
-                .ifPresent(q -> fromHost = Boolean.TRUE);
+            .stream()
+            .filter(host -> sender.getDomain().equals(host.toLowerCase()))
+            .findFirst()
+            .ifPresent(q -> fromHost = Boolean.TRUE);
 
         final StringBuilder response = new StringBuilder();
 
         if (Boolean.TRUE.equals(fromHost) && !authenticated) {
-            response.append("530 5.7.0 Authentication required");
+            response.append(SmtpError.AUTHENTICATION_REQUIRED);
         } else {
             this.recipients.clear();
             this.toHost = null;
@@ -601,7 +599,8 @@ public class SMTPWorker implements Runnable {
     private List<Mailbox> recipients = new LinkedList<>();
 
     private byte rcptTo(final String statement, final byte[] raw) throws IOException {
-        if(this.remoteHost == null) {
+        if(this.remoteHost == null)
+        {
             return introductionMissing();
         }
 
@@ -631,10 +630,10 @@ public class SMTPWorker implements Runnable {
         final List<String> responses = new ArrayList<>();
 
         if (this.sender == null) {
-            responses.add("554 5.7.0 Please, identify yourself");
+            responses.add(SmtpError.SENDER_MISSING.toString());
         } else if (Boolean.FALSE.equals(fromHost) && Boolean.FALSE.equals(toHost)) {
             toHost = null;
-            // response.append("551-5.7.1 You've been a naughty guy, right?\r\n");
+            // responses.add("551-5.7.1 You've been a naughty guy, right?");
             responses.add("551-5.7.1 Forwarding to remote hosts is not acceptable");
             responses.add("551 5.7.1 Select another host to act as your forwarder");
         } else {
@@ -679,11 +678,11 @@ public class SMTPWorker implements Runnable {
         final StringBuilder response = new StringBuilder();
 
         if (this.fromHost == null && this.toHost == null) {
-            response.append("554 5.1.0 No valid recipients");
+            response.append(SmtpError.INVALID_RECIPIENTS);
         } else if (this.fromHost == null) {
-            response.append("554 5.1.8 Please, identify yourself");
+            response.append(SmtpError.SENDER_MISSING);
         } else if (this.toHost == null) {
-            response.append("554 5.1.1 Please, specify a destination mailbox");
+            response.append(SmtpError.DESTINATION_MISSING);
         } else {
             dataInProgress = true;
             // response.append("354 Start mail input; end with <CRLF>.<CRLF>\r\n");
@@ -703,10 +702,9 @@ public class SMTPWorker implements Runnable {
     }
 
     private byte unavailable() throws IOException {
-        final String response = "550 5.3.0 Unavailable";
-        logger.infof("S: %s", response);
+        logger.infof("S: %s", SmtpError.UNAVAILABLE);
 
-        writeLine(os, response);
+        writeLine(os, SmtpError.UNAVAILABLE);
         os.flush();
 
         return 0;
@@ -750,10 +748,9 @@ public class SMTPWorker implements Runnable {
     }
 
     private byte introductionMissing() throws IOException {
-        final String response = "554 5.4.0 Please, introduce yourself";
-        logger.infof("S: %s", response);
+        logger.infof("S: %s", SmtpError.INTRODUCTION_MISSING);
 
-        writeLine(os, response);
+        writeLine(os, SmtpError.INTRODUCTION_MISSING);
         os.flush();
 
         return 0;
@@ -824,9 +821,9 @@ public class SMTPWorker implements Runnable {
         return 0;
     }
 
-    private void writeLine(final OutputStream out, final CharSequence content) throws IOException
+    private void writeLine(final OutputStream out, final Object content) throws IOException
     {
-        out.write(asciiraw(content));
+        out.write(asciiraw(content.toString()));
         out.write(ENDLINE);
     }
 
