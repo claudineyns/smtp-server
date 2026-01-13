@@ -1,4 +1,4 @@
-package io.github.rfc5321.server;
+package io.github.smtp.workers;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -9,27 +9,20 @@ import java.io.OutputStream;
 import java.net.Inet4Address;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.logging.Logger;
-import java.util.regex.Pattern;
+import org.jboss.logging.Logger;
 
-import io.github.rfc5321.logging.LoggerService;
-
-public class SMTPInstance implements Runnable {
-    private static final Charset ASCII = StandardCharsets.US_ASCII;
-
-    private final Logger logger = LoggerService.getLogger(getClass().getSimpleName());
+public class SMTPWorker implements Runnable {
+    private final Logger logger = Logger.getLogger(getClass());
 
     @SuppressWarnings("unused")
     private final UUID sessionId;
@@ -40,95 +33,79 @@ public class SMTPInstance implements Runnable {
 
     private String clientHost;
     private String clientAddress;
-    private String localhost;
-    private String logFolder;
-
+    
     private final String timestamp;
-
+    
     private final List<String> whiteList = new LinkedList<>();
-
-    public SMTPInstance(final Socket socket, final UUID id, final List<String> whiteList) {
+    
+    public SMTPWorker(final Socket socket, final UUID id, final List<String> whiteList)
+    {
         this.socket = socket;
         this.sessionId = id;
         this.whiteList.addAll(whiteList);
-
-        this.timestamp = ZonedDateTime.now(ZoneId.systemDefault())
-                .format(DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US));
+        
+        this.timestamp = ZonedDateTime
+            .now(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US));
 
         this.clientHost = socket.getInetAddress().getHostAddress();
         this.clientAddress = socket.getInetAddress().getHostName();
 
-        log(String.format("Connection from %s [%s]",
-                this.clientHost,
-                this.clientAddress));
-
-        this.localhost = Optional
-                .ofNullable(System.getenv("SMTP_HOSTNAME"))
-                .orElse(Optional
-                        .ofNullable(System.getProperty("smtp.hostname"))
-                        .orElse(System.getenv("HOSTNAME")));
-
-        this.logFolder = Optional
-                .ofNullable(System.getenv("SMTP_LOG_FOLDER"))
-                .orElse(Optional
-                        .ofNullable(System.getProperty("smtp.log.folder"))
-                        .orElse(System.getProperty("java.io.tmpdir")));
-
+        logger.debugf("Connection from %s [%s]", this.clientHost, this.clientAddress);
     }
 
-    private void log(String message) {
-        logger.info(String.format("%s", message));
+    private String hostname;
+    public SMTPWorker setHostname(final String hostname)
+    {
+        this.hostname = hostname;
+        return this;
     }
 
-    private void slog(CharSequence message) {
-        final String data = message.toString();
-
-        if (Pattern.compile("^\\d{3}\\-").matcher(data).find()) {
-            logger.info("S:\n" + data);
-        } else {
-            logger.info("S: " + data);
-        }
+    private String contentFolder;
+    public SMTPWorker setContentFolder(final String contentFolder)
+    {
+        this.contentFolder = contentFolder;
+        return this;
     }
 
-    private long last = 0;
-    private Object _self = this;
-    private boolean closed = false;
-
-    public void run() {
-        CompletableFuture.runAsync(() -> checkClosure());
-
+    public void run()
+    {
         processRequest();
-    }
-
-    private void checkClosure() {
-        while (!closed) {
-            last = System.currentTimeMillis();
-            try {
-                synchronized (_self) {
-                    _self.wait(40000);
-                }
-            } catch (InterruptedException e) {
-            }
-            if ((System.currentTimeMillis() - last) > 30000) {
-                close();
-                break;
-            }
-        }
     }
 
     private void processRequest() {
         try {
             process();
-        } catch (IOException e) {
-            System.err.println(e.getMessage());
+        } catch (IOException failure) {
+            logger.warn(failure.getMessage());
         } finally {
-            if (!closed) {
-                close();
-            }
+            close();
         }
     }
 
+    private void close()
+    {
+        try {
+            logger.trace("--- shutting down connection ---");
+            socket.shutdownOutput();
+        } catch(IOException failure)
+        {
+            logger.warn(failure.getMessage());
+        }
+
+        try {
+            socket.close();
+        } catch(IOException failure)
+        {
+            logger.warn(failure.getMessage());
+        }
+
+        logger.debug("--- connection closed ---");
+    }
+
     private void process() throws IOException {
+        socket.setSoTimeout(30000);
+
         is = socket.getInputStream();
         os = socket.getOutputStream();
         startPresentation();
@@ -136,9 +113,10 @@ public class SMTPInstance implements Runnable {
     }
 
     private byte startPresentation() throws IOException {
-        final String presentation = "220 " + this.localhost + " ESMTP Ready\r\n";
+        final String presentation = "220 " + this.hostname + " ESMTP Ready";
+        logger.debug(presentation);
 
-        os.write(presentation.getBytes(ASCII));
+        writeLine(os, presentation);
         os.flush();
 
         return 0;
@@ -154,7 +132,7 @@ public class SMTPInstance implements Runnable {
             }
             if (reader == '\n') {
                 try {
-                    checkStatement(st);
+                    checkStatement(st.toByteArray());
                 } catch (IOException e) {
                     break;
                 }
@@ -167,17 +145,10 @@ public class SMTPInstance implements Runnable {
         return 0;
     }
 
-    private byte checkStatement(final ByteArrayOutputStream os) throws IOException {
+    private byte checkStatement(final byte[] raw) throws IOException {
+        final String statement = new String(raw, StandardCharsets.US_ASCII);
 
-        last = System.currentTimeMillis();
-        synchronized (_self) {
-            _self.notifyAll();
-        }
-
-        final byte[] raw = os.toByteArray();
-        final String statement = new String(raw, ASCII);
-
-        log(String.format("C: %s", statement));
+        logger.infof("C: %s", statement);
 
         if ("QUIT".equalsIgnoreCase(statement)) {
             quit(); // will throw exception to close
@@ -257,17 +228,16 @@ public class SMTPInstance implements Runnable {
     private byte help() throws IOException {
         final StringBuilder response = new StringBuilder();
 
-        response.append("211 EHLO HELO VRFY EXPN AUTH MAIL RCPT DATA HELP\r\n");
+        response.append("211 EHLO HELO VRFY EXPN AUTH MAIL RCPT DATA HELP");
+        logger.trace(response);
 
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
         return 0;
     }
 
     private byte helo(final String statement, final byte[] raw) throws IOException {
-        final StringBuilder response = new StringBuilder();
-
         final String host = statement.substring(5);
 
         // Validate Client host
@@ -277,10 +247,10 @@ public class SMTPInstance implements Runnable {
             return unavailable();
         }
 
-        response.append("250 " + this.localhost + " greets " + host + "\r\n");
-        slog(response);
+        final String response = "250 " + this.hostname + " greets " + host;
+        logger.infof("S: %s", response);
 
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
         return 0;
@@ -293,8 +263,6 @@ public class SMTPInstance implements Runnable {
     private String remoteHost;
 
     private byte ehlo(final String statement, final byte[] raw) throws IOException {
-        final StringBuilder response = new StringBuilder();
-
         final String host = statement.substring(5);
 
         // Validate Client host
@@ -305,17 +273,26 @@ public class SMTPInstance implements Runnable {
             return unavailable();
         }
 
-        response.append("250-" + this.localhost + " greets " + this.remoteHost + "\r\n");
-        response.append("250-HELP\r\n");
-        response.append("250-AUTH PLAIN LOGIN\r\n");
-        response.append("250-ENHANCEDSTATUSCODES\r\n");
-        response.append("250-8BITMIME\r\n");
-        response.append("250 BINARYMIME\r\n");
-        // response.append("250 CHUNKING\r\n");
+        final List<String> responses = new ArrayList<>();
 
-        slog(response);
+        responses.add("250-" + this.hostname + " greets " + this.remoteHost);
+        responses.add("250-HELP");
+        responses.add("250-AUTH PLAIN LOGIN");
+        responses.add("250-ENHANCEDSTATUSCODES");
+        responses.add("250-8BITMIME");
+        responses.add("250 BINARYMIME");
+        // responses.add("250 CHUNKING");
 
-        os.write(response.toString().getBytes(ASCII));
+        for(final String line: responses)
+        {
+            logger.infof("S: %s", line);
+        }
+
+        for(final String line: responses)
+        {
+            writeLine(os, line);
+        }
+
         os.flush();
 
         return 0;
@@ -324,13 +301,11 @@ public class SMTPInstance implements Runnable {
     // https://docs.oracle.com/cd/E54932_01/doc.705/e54936/cssg_create_ssl_cert.htm#CSVSG180
 
     private byte startTls() throws IOException {
-        final StringBuilder response = new StringBuilder();
+        final String response = "454 4.7.0 TLS not available due to temporary reason";
+        // final String response = ""220 Ready to start TLS";
+        logger.tracef("S: %s", response);
 
-        response.append("454 4.7.0 TLS not available due to temporary reason\r\n");
-        // response.append("220 Ready to start TLS");
-        slog(response);
-
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
         return 0;
@@ -354,20 +329,13 @@ public class SMTPInstance implements Runnable {
      */
 
     private byte authLogin() throws IOException {
-
-        StringBuilder response = null;
-
-        response = new StringBuilder();
-
-        final String usernameLabel = "'Username:"; // base64: VXNlcm5hbWU6
-        response
-                .append("334 ")
-                .append(Base64.getEncoder().encodeToString(usernameLabel.getBytes(ASCII)))
-                .append("\r\n");
+        final String usernameLabel = "Username:"; // base64: VXNlcm5hbWU6
 
         logger.info("S: Awaiting for " + usernameLabel);
 
-        os.write(response.toString().getBytes(ASCII));
+        os.write(asciiraw("334 "));
+        os.write(Base64.getEncoder().encode(asciiraw(usernameLabel)));
+        os.write(ENDLINE);
         os.flush();
 
         String username = getContent();
@@ -376,20 +344,17 @@ public class SMTPInstance implements Runnable {
     }
 
     private byte authLogin(String statement, byte[] raw) throws IOException {
-        final String username = statement.substring(11);
-
         if (username.isBlank()) {
             return authLogin();
         }
 
-        StringBuilder response = new StringBuilder();
+        if (username.isBlank()) {
+            final String response = "535 5.7.8 Authentication credentials invalid";
+            logger.infof("S: %s", response);
 
-        if (username.trim().isEmpty()) {
-            response.append("535 5.7.8 Authentication credentials invalid\r\n");
-            slog(response);
-
-            os.write(response.toString().getBytes(ASCII));
+            writeLine(os, response);
             os.flush();
+
             return 0;
         }
 
@@ -397,43 +362,38 @@ public class SMTPInstance implements Runnable {
     }
 
     private byte validateAuthLoginCredential(String username) throws IOException {
-        this.username = new String(Base64.getDecoder().decode(username), ASCII);
+        this.username = new String(Base64.getDecoder().decode(username), StandardCharsets.US_ASCII);
         logger.info("C: Username: " + this.username);
 
-        StringBuilder response = new StringBuilder();
-
         final String passwordLabel = "Password:"; // base64: UGFzc3dvcmQ6
-        response
-                .append("334 ")
-                .append(Base64.getEncoder().encodeToString(passwordLabel.getBytes(ASCII)))
-                .append("\r\n");
-
         logger.info("S: Awaiting for " + passwordLabel);
-                
-        os.write(response.toString().getBytes(ASCII));
+
+        os.write(asciiraw("334 "));
+        os.write(Base64.getEncoder().encode(asciiraw(passwordLabel)));
+        os.write(ENDLINE);
         os.flush();
 
         final String password = getContent();
 
-        response = new StringBuilder();
+        final StringBuilder response = new StringBuilder();
 
         if (password.trim().isEmpty()) {
-            response.append("535 5.7.8 Authentication credentials invalid\r\n");
+            response.append("535 5.7.8 Authentication credentials invalid");
         } else {
-            this.password = new String(Base64.getDecoder().decode(password), ASCII);
+            this.password = new String(Base64.getDecoder().decode(password), StandardCharsets.US_ASCII);
             logger.info("C: Password: " + this.password);
 
             if (LOCAL_USERNAME.equals(this.username) && LOCAL_PASSWORD.equals(this.password)) {
                 this.authenticated = true;
-                response.append("235 2.7.0 Authentication Succeeded\r\n");
+                response.append("235 2.7.0 Authentication Succeeded");
             } else {
-                response.append("500 5.7.0 Authentication credentials invalid\r\n");
+                response.append("500 5.7.0 Authentication credentials invalid");
             }
         }
 
-        slog(response);
+        logger.infof("S: %s", response);
 
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
         return 0;
@@ -458,10 +418,9 @@ public class SMTPInstance implements Runnable {
             }
 
             data.write(reader);
-
         }
 
-        return new String(data.toByteArray(), ASCII);
+        return new String(data.toByteArray(), StandardCharsets.US_ASCII);
     }
 
     private byte authPlain(String statement, byte[] raw) throws IOException {
@@ -476,15 +435,12 @@ public class SMTPInstance implements Runnable {
     }
 
     private byte authPlainTransition() throws IOException {
-        final StringBuilder response = new StringBuilder();
+        final String response = "334 Go ahead";
 
-        response.append("334 Go ahead\r\n");
-
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
-        String credential = getContent();
-
+        final String credential = getContent();
         return authPlainValidation(credential);
     }
 
@@ -492,34 +448,31 @@ public class SMTPInstance implements Runnable {
         final StringBuilder response = new StringBuilder();
 
         if (credential.trim().isEmpty()) {
-            response.append("535 5.7.8  Authentication credentials invalid\r\n");
+            response.append("535 5.7.8  Authentication credentials invalid");
         } else {
             final String validCredential = Base64.getEncoder()
-                    .encodeToString((LOCAL_USERNAME + ":" + LOCAL_PASSWORD).getBytes(ASCII));
+                    .encodeToString((LOCAL_USERNAME + ":" + LOCAL_PASSWORD).getBytes(StandardCharsets.US_ASCII));
             if (validCredential.equals(credential)) {
                 this.authenticated = true;
-                response.append("235 2.7.0  Authentication Succeeded\r\n");
+                response.append("235 2.7.0  Authentication Succeeded");
             } else {
-                response.append("535 5.7.8  Authentication credentials invalid\r\n");
+                response.append("535 5.7.8  Authentication credentials invalid");
             }
         }
-        slog(response);
 
-        slog(response);
+        logger.infof("S: %s", response);
 
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
         return 0;
     }
 
     private byte verifyBadSintax() throws IOException {
-        final StringBuilder response = new StringBuilder();
+        final String response = "501 5.1.1 Please, provide a mailbox";
+        logger.infof("S: %s", response);
 
-        response.append("501 5.1.1 Please, provide a mailbox\r\n");
-        slog(response);
-
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
         return 0;
@@ -530,52 +483,66 @@ public class SMTPInstance implements Runnable {
     static final Mailbox MAILING_LIST_EXAMPLE = new Mailbox("mailing@example.com");
 
     private byte verify(String statement, byte[] raw) throws IOException {
-        final StringBuilder response = new StringBuilder();
+        final List<String> responses = new ArrayList<>();
 
         final String mailbox = statement.substring(statement.indexOf(' ') + 1).trim();
 
         if (MAILING_LIST_EXAMPLE.is(mailbox)) {
-            response.append("550 That is a mailing list, not a user");
+            responses.add("550 That is a mailing list, not a user");
         } else if ((JOHN_EXAMPLE.getUser()).equals(mailbox) || JOHN_EXAMPLE.is(mailbox)) {
-            response.append("250 ").append(JOHN_EXAMPLE.getFullEmail()).append("\r\n");
+            responses.add("250 " + JOHN_EXAMPLE.getFullEmail());
         } else if ((JANE_EXAMPLE.getUser()).equals(mailbox) || JANE_EXAMPLE.is(mailbox)) {
-            response.append("250 ").append(JANE_EXAMPLE.getFullEmail()).append("\r\n");
+            responses.add("250 " + JANE_EXAMPLE.getFullEmail());
         } else if ("doe".equals(mailbox)) {
-            response.append("553-Ambiguous; Possibilities are\r\n");
-            response.append("553-").append(JOHN_EXAMPLE.getFullEmail()).append("\r\n");
-            response.append("553 ").append(JANE_EXAMPLE.getFullEmail()).append("\r\n");
+            responses.add("553-Ambiguous; Possibilities are");
+            responses.add("553-" + JOHN_EXAMPLE.getFullEmail());
+            responses.add("553 " + JANE_EXAMPLE.getFullEmail());
         } else {
-            response.append("252-2.1.0 Unable to verify user\r\n");
-            response.append("252 2.1.0 send some mail, I'll try my best\r\n");
+            responses.add("252-2.1.0 Unable to verify user");
+            responses.add("252 2.1.0 send some mail, I'll try my best");
         }
 
-        slog(response);
+        for(final String line: responses)
+        {
+            logger.infof("S: %s", line);
+        }
 
-        os.write(response.toString().getBytes(ASCII));
+        for(final String line: responses)
+        {
+            writeLine(os, line);
+        }
+
         os.flush();
 
         return 0;
     }
 
     private byte expand(String statement, byte[] raw) throws IOException {
-        final StringBuilder response = new StringBuilder();
+        final List<String> responses = new ArrayList<>();
 
         final String mailbox = statement.substring(statement.indexOf(' ') + 1).trim();
 
         if (MAILING_LIST_EXAMPLE.is(mailbox) || MAILING_LIST_EXAMPLE.getUser().equals(mailbox)) {
-            response.append("250-").append(JOHN_EXAMPLE.getFullEmail()).append("\r\n");
-            response.append("250 ").append(JANE_EXAMPLE.getFullEmail()).append("\r\n");
+            responses.add("250-" + JOHN_EXAMPLE.getFullEmail());
+            responses.add("250 " + JANE_EXAMPLE.getFullEmail());
         } else if ((JOHN_EXAMPLE.getUser()).equals(mailbox) || JOHN_EXAMPLE.is(mailbox)) {
-            response.append("550 That is a user name, not a mailing list\r\n");
+            responses.add("550 That is a user name, not a mailing list");
         } else if ((JANE_EXAMPLE.getUser()).equals(mailbox) || JANE_EXAMPLE.is(mailbox)) {
-            response.append("550 That is a user name, not a mailing list\r\n");
+            responses.add("550 That is a user name, not a mailing list");
         } else {
-            response.append("252 2.1.0 Unable to verify mailbox for mailing list\r\n");
+            responses.add("252 2.1.0 Unable to verify mailbox for mailing list");
         }
 
-        slog(response);
+        for(final String line: responses)
+        {
+            logger.infof("S: %s", line);
+        }
 
-        os.write(response.toString().getBytes(ASCII));
+        for(final String line: responses)
+        {
+            writeLine(os, line);
+        }
+       
         os.flush();
 
         return 0;
@@ -614,16 +581,17 @@ public class SMTPInstance implements Runnable {
         final StringBuilder response = new StringBuilder();
 
         if (Boolean.TRUE.equals(fromHost) && !authenticated) {
-            response.append("530 5.7.0 Authentication required\r\n");
+            response.append("530 5.7.0 Authentication required");
         } else {
             this.recipients.clear();
             this.toHost = null;
             this.sender = sender;
-            response.append(String.format("250 2.1.0 <%s>: Originator OK\r\n", this.sender.getEmail()));
+            response.append(String.format("250 2.1.0 <%s>: Originator OK", this.sender.getEmail()));
         }
-        slog(response);
 
-        os.write(response.toString().getBytes(ASCII));
+        logger.infof("S: %s", response);
+
+        writeLine(os, response);
         os.flush();
 
         return 0;
@@ -660,34 +628,40 @@ public class SMTPInstance implements Runnable {
                 .findFirst()
                 .ifPresent(host -> toHost = Boolean.TRUE);
 
-        final StringBuilder response = new StringBuilder();
+        final List<String> responses = new ArrayList<>();
 
         if (this.sender == null) {
-            response.append("554 5.7.0 Please, identify yourself\r\n");
+            responses.add("554 5.7.0 Please, identify yourself");
         } else if (Boolean.FALSE.equals(fromHost) && Boolean.FALSE.equals(toHost)) {
             toHost = null;
             // response.append("551-5.7.1 You've been a naughty guy, right?\r\n");
-            response.append("551-5.7.1 Forwarding to remote hosts is not acceptable\r\n");
-            response.append("551 5.7.1 Select another host to act as your forwarder\r\n");
+            responses.add("551-5.7.1 Forwarding to remote hosts is not acceptable");
+            responses.add("551 5.7.1 Select another host to act as your forwarder");
         } else {
             this.recipients.add(recipient);
-            response.append(String.format("250 2.1.0 <%s>: Recipient OK\r\n", recipient.getEmail()));
+            responses.add(String.format("250 2.1.0 <%s>: Recipient OK", recipient.getEmail()));
         }
-        slog(response);
 
-        os.write(response.toString().getBytes(ASCII));
+        for(final String line: responses)
+        {
+            logger.infof("S: %s", line);
+        }
+
+        for(final String line: responses)
+        {
+            writeLine(os, line);
+        }
+
         os.flush();
 
         return 0;
     }
 
     private byte noop() throws IOException {
-        final StringBuilder response = new StringBuilder();
+        final String response = "250 2.0.0 OK";
+        logger.infof("S: %s", response);
 
-        response.append("250 2.0.0 OK\r\n");
-        slog(response);
-
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
         return 0;
@@ -705,19 +679,20 @@ public class SMTPInstance implements Runnable {
         final StringBuilder response = new StringBuilder();
 
         if (this.fromHost == null && this.toHost == null) {
-            response.append("554 5.1.0 No valid recipients\r\n");
+            response.append("554 5.1.0 No valid recipients");
         } else if (this.fromHost == null) {
-            response.append("554 5.1.8 Please, identify yourself\r\n");
+            response.append("554 5.1.8 Please, identify yourself");
         } else if (this.toHost == null) {
-            response.append("554 5.1.1 Please, specify a destination mailbox\r\n");
+            response.append("554 5.1.1 Please, specify a destination mailbox");
         } else {
             dataInProgress = true;
             // response.append("354 Start mail input; end with <CRLF>.<CRLF>\r\n");
-            response.append("354 I am ready, send 8BITMIME message, ending in <CRLF>.<CRLF>\r\n");
+            response.append("354 I am ready, send 8BITMIME message, ending in <CRLF>.<CRLF>");
         }
-        slog(response);
 
-        os.write(response.toString().getBytes(ASCII));
+        logger.infof("S: %s", response);
+
+        writeLine(os, response);
         os.flush();
 
         if (dataInProgress) {
@@ -728,12 +703,10 @@ public class SMTPInstance implements Runnable {
     }
 
     private byte unavailable() throws IOException {
-        final StringBuilder response = new StringBuilder();
+        final String response = "550 5.3.0 Unavailable";
+        logger.infof("S: %s", response);
 
-        response.append("550 5.3.0 Unavailable\r\n");
-        slog(response);
-
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
         return 0;
@@ -745,54 +718,45 @@ public class SMTPInstance implements Runnable {
         this.toHost = null;
         this.recipients.clear();
 
-        final StringBuilder response = new StringBuilder();
+        final String response = "250 2.1.0 OK";
+        logger.infof("S: %s", response);
 
-        response.append("250 2.1.0 OK\r\n");
-        slog(response);
-
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
         return 0;
     }
 
     private byte quit() throws IOException {
-        final StringBuilder response = new StringBuilder();
+        final List<String> responses = new ArrayList<>();
 
-        response.append("221-2.0.0 Thank you for your cooperation\r\n");
-        response.append("221-2.0.0 " + this.localhost + " Service closing transmission channel\r\n");
-        response.append("221 2.0.0 Goodbye\r\n");
+        responses.add("221-2.0.0 Thank you for your cooperation");
+        responses.add("221-2.0.0 " + this.hostname + " Service closing transmission channel");
+        responses.add("221 2.0.0 Goodbye");
 
-        slog(response);
+        for(final String line: responses)
+        {
+            logger.infof("S: %s", line);
+        }
 
-        os.write(response.toString().getBytes(ASCII));
+        for(final String line: responses)
+        {
+            writeLine(os, line);
+        }
+
         os.flush();
 
         throw new IOException("Connection closed by client");
     }
 
     private byte introductionMissing() throws IOException {
-        final StringBuilder response = new StringBuilder();
+        final String response = "554 5.4.0 Please, introduce yourself";
+        logger.infof("S: %s", response);
 
-        response.append("554 5.4.0 Please, introduce yourself\r\n");        
-        slog(response);
-
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
         return 0;
-    }
-
-    private void close() {
-        try {
-            if (!this.closed) {
-                this.closed = true;
-                socket.close();
-            }
-        } catch (IOException e) {
-        }
-
-        log("Connection closed");
     }
 
     private void consumeData() throws IOException {
@@ -825,29 +789,27 @@ public class SMTPInstance implements Runnable {
     }
 
     private byte dataReceived(final ByteArrayOutputStream rawData) throws IOException {
-        final StringBuilder response = new StringBuilder();
-
         // Queuing only if this server is a relay, otherwise (final destination),
         // persist data
-        response.append("250 2.6.0 Message accepted\r\n");
+        final String response = "250 2.6.0 Message accepted";
 
-        os.write(response.toString().getBytes(ASCII));
+        writeLine(os, response);
         os.flush();
 
         final String hash = UUID.randomUUID().toString().replaceAll("\\-", "");
 
-        final File file = new File(this.logFolder, "mail-" + hash + ".out");
+        final File file = new File(this.contentFolder, "mail-" + hash + ".out");
 
         try (OutputStream outData = new FileOutputStream(file)) {
             final byte[] receivedFrom = String
                     .format("Received: from %s (%s)%s", this.clientHost, this.clientAddress, "\r\n")
-                    .getBytes(ASCII);
+                    .getBytes(StandardCharsets.US_ASCII);
 
             outData.write(receivedFrom);
 
             final byte[] deliveryDate = String
                     .format("X-Delivery-Date: %s%s", this.timestamp, "\r\n")
-                    .getBytes(ASCII);
+                    .getBytes(StandardCharsets.US_ASCII);
 
             outData.write(deliveryDate);
 
@@ -857,9 +819,20 @@ public class SMTPInstance implements Runnable {
 
         } catch (IOException e) { /***/ }
 
-        log("--- Data hash: " + hash + " ---");
+        logger.infof("--- Data hash: %s ---", hash);
 
         return 0;
+    }
+
+    private void writeLine(final OutputStream out, final CharSequence content) throws IOException
+    {
+        out.write(asciiraw(content));
+        out.write(ENDLINE);
+    }
+
+    private byte[] asciiraw(final CharSequence content)
+    {
+        return content.toString().getBytes(StandardCharsets.US_ASCII);
     }
 
     static class Mailbox {
@@ -910,4 +883,5 @@ public class SMTPInstance implements Runnable {
         }
     }
 
+    static final byte[] ENDLINE = "\r\n".getBytes(StandardCharsets.US_ASCII);
 }

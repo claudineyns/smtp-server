@@ -1,87 +1,70 @@
-package io.github.rfc5321.server;
+package io.github.smtp.server;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.URL;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.Properties;
-import java.util.Random;
+import java.util.List;
+import java.util.concurrent.CompletionException;
 
-import org.apache.commons.io.IOUtils;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.jboss.logging.Logger;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.TestInstance.Lifecycle;
 
-import javax.mail.Authenticator;
-import javax.mail.BodyPart;
-import javax.mail.Message;
-import javax.mail.Multipart;
-import javax.mail.PasswordAuthentication;
-import javax.mail.Session;
-import javax.mail.Transport;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeBodyPart;
-import javax.mail.internet.MimeMessage;
-import javax.mail.internet.MimeMultipart;
+import io.github.smtp.configs.Configs;
+import io.quarkus.test.junit.QuarkusTest;
 
-@TestInstance(Lifecycle.PER_CLASS)
+import io.vertx.ext.mail.MailConfig;
+import io.vertx.ext.mail.MailMessage;
+import io.vertx.ext.mail.MailAttachment;
+import io.vertx.ext.mail.LoginOption;
+import io.vertx.ext.mail.StartTLSOptions;
+import io.vertx.mutiny.core.Vertx;
+import io.vertx.mutiny.ext.mail.MailClient;
+import jakarta.inject.Inject;
+import io.vertx.core.buffer.Buffer;
+
+@QuarkusTest
 public class MailTest {
-    static final String hostname = "localhost";
-    static final int port = 50000 + new Random().nextInt(1000);
+    @Inject
+    Configs configs;
 
-    SMTPAgent smtp;
+    @Inject
+    SMTPAgent server;
 
-    @BeforeAll
-    public void startup() throws Exception {
-        System.setProperty("smtp.hostname", hostname);
-        System.setProperty("smtp.fqdn.whitelist", "example.com");
-        System.setProperty("smtp.port", Integer.toString(port));
+    @Inject
+    Vertx vertx;
 
-        System.out.println("[DEBUG] Attempt to connect on port " + port);
-        smtp = new SMTPAgent().start();
-        Thread.sleep(2000);
+    @Inject
+    Logger logger;
+
+    @BeforeEach
+    void start() throws Exception
+    {
+        server.start();
     }
 
-    @AfterAll
-    public void terminate() throws Exception {
-        smtp.stop();
+    @AfterEach
+    void stop() throws Exception
+    {
+        server.stop();
     }
 
     @Test
     public void sendMailSuccess() throws Exception {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port().orElse(25);
+
         final String username = "postmaster@example.com";
         final String password = "myp@77";
-
-        final Properties prop = new Properties();
-        prop.put("mail.smtp.host", "localhost");
-        prop.put("mail.smtp.auth", "true");
-        prop.put("mail.smtp.port", Integer.toString(port));
-
-        // prop.put("mail.smtp.starttls.enable", "true"); // TLS
-
-        final Session session = Session.getInstance(
-                prop,
-                new Authenticator() {
-                    protected PasswordAuthentication getPasswordAuthentication() {
-                        return new PasswordAuthentication(username, password);
-                    }
-                });
-
-        final Message message = new MimeMessage(session);
-        message.setFrom(new InternetAddress(username));
-        message.setRecipients(
-                Message.RecipientType.TO,
-                InternetAddress.parse("johndoe@example.com, janedoe@example.com, jsmith@example.com"));
-
-        message.setSubject("Testing Plain Email");
 
         final StringBuilder text = new StringBuilder("");
         text.append("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin interdum, turpis ut sollicitudin malesuada, nisi purus molestie ligula, id cursus mauris sapien quis urna. Nulla dui diam, sagittis non feugiat vitae, ultricies a odio. Duis congue enim sit amet metus elementum, mattis egestas erat molestie. Ut vel porta leo. Proin in risus bibendum, bibendum nulla quis, semper dui. Nulla aliquam tristique egestas. Quisque non magna sagittis, vulputate nunc sed, dictum tortor. Fusce ligula quam, efficitur sit amet justo non, laoreet commodo risus. Aliquam nec ante ac nulla vestibulum fermentum non eu leo. Quisque nec odio a tortor imperdiet volutpat id sit amet nulla. Suspendisse consequat hendrerit mattis.");
@@ -90,25 +73,49 @@ public class MailTest {
         text.append("\n\nEtiam scelerisque nec sem sit amet laoreet. Cras tincidunt eu nibh ullamcorper condimentum. Donec tempus ipsum et mi gravida rutrum. Vivamus sed neque ac elit placerat pretium. Pellentesque elementum est quis ex pulvinar interdum. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Nullam pellentesque vel urna nec lobortis. Maecenas vel diam odio. Vestibulum a dui nec lorem malesuada volutpat in non purus. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin interdum fringilla erat vitae pellentesque. Fusce tincidunt consequat venenatis. Proin tempus placerat leo sit amet luctus. Integer eu consectetur tortor. Mauris vestibulum dolor eu nunc sagittis, eu facilisis libero viverra. Praesent sollicitudin tellus ac scelerisque congue.");
         text.append("\n\nCurabitur sit amet mollis ex, vulputate fermentum odio. Aliquam cursus urna purus, vel convallis arcu ullamcorper in. Phasellus commodo finibus lorem sit amet pretium. Vivamus porttitor est vel consectetur pharetra. Interdum et malesuada fames ac ante ipsum primis in faucibus. Aenean sed arcu tempus, ullamcorper quam a, euismod odio. Aenean eget vestibulum massa, id sagittis lectus.");
 
-        BodyPart messageBodyPart = new MimeBodyPart(); 
-        messageBodyPart.setText(text.toString());
+        final HttpClient http = HttpClient.newHttpClient();
 
-        final File attachment = new File(System.getProperty("java.io.tmpdir"), "rfc6152.pdf");
-        try (final OutputStream content = new FileOutputStream(attachment)) {
-            URL url = new URL("https://www.rfc-editor.org/rfc/pdfrfc/rfc6152.txt.pdf");
-            IOUtils.copy(url.openStream(), content);
-            content.flush();
+        // Lista da OpenAI
+        final HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("https://www.rfc-editor.org/rfc/pdfrfc/rfc6152.txt.pdf"))
+                .build();
+
+        final byte[] raw = http.send(request, HttpResponse.BodyHandlers.ofByteArray()).body();
+
+        final MailConfig config = new MailConfig()
+                .setHostname(hostname)
+                .setPort(port)
+                .setLogin(LoginOption.REQUIRED)
+                //.setStarttls(StartTLSOptions.REQUIRED)
+                .setStarttls(StartTLSOptions.DISABLED)
+                .setUsername(username)
+                .setPassword(password);
+
+        final MailClient client = MailClient.create(vertx, config);
+
+        final MailAttachment attachment = MailAttachment.create()
+                .setData(Buffer.buffer(raw))
+                .setName("rfc6152.txt.pdf")
+                .setContentType("application/pdf") // Ajuste conforme o tipo do arquivo
+                .setDisposition("attachment");
+
+        final MailMessage message = new MailMessage()
+                .setFrom(username)
+                .setTo(List.of("johndoe@example.com", "janedoe@example.com", "jsmith@example.com"))
+                .setSubject("Testing Plain Email")
+                .setHtml(text.toString())
+                .setAttachment(List.of(attachment));
+
+        // 4. Enviar e aguardar (importante para @QuarkusMain não fechar antes)
+        try
+        {
+            client.sendMail(message).await().indefinitely();
+            logger.info("E-mail enviado com sucesso!");
+        } catch(CompletionException failure)
+        {
+            logger.warn(failure.getMessage());
         }
 
-        MimeBodyPart attachmentPart = new MimeBodyPart();
-        attachmentPart.attachFile(attachment);
-
-        Multipart multipart = new MimeMultipart();
-        multipart.addBodyPart(messageBodyPart);
-        multipart.addBodyPart(attachmentPart);
-
-        message.setContent(multipart);
-        Transport.send(message);                
     }
 
     static final Charset ASCII = StandardCharsets.US_ASCII;
@@ -136,11 +143,24 @@ public class MailTest {
         return content(in);
     }
 
-    static final int read_timeout = 1000;
-    static final int connect_timeout = 2000;
+    static final int read_timeout = 250;
+    static final int connect_timeout = 1000;
+    static final int startup_timeout = 1000;
 
     @Test
     public void verifyMailboxSuccess() throws Exception {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port().orElse(25);
+
+        try
+        {
+            Thread.sleep(startup_timeout);
+        } catch(InterruptedException failure)
+        {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(failure);
+        }
+
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
@@ -180,6 +200,18 @@ public class MailTest {
 
     @Test
     public void expandMailboxSuccess() throws Exception {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port().orElse(25);
+
+        try
+        {
+            Thread.sleep(startup_timeout);
+        } catch(InterruptedException failure)
+        {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(failure);
+        }
+
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
@@ -216,6 +248,18 @@ public class MailTest {
 
     @Test
     public void blacklistSuccess() throws Exception {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port().orElse(25);
+
+        try
+        {
+            Thread.sleep(startup_timeout);
+        } catch(InterruptedException failure)
+        {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(failure);
+        }
+
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
@@ -246,6 +290,18 @@ public class MailTest {
 
     @Test
     public void nullSenderSuccess() throws Exception {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port().orElse(25);
+
+        try
+        {
+            Thread.sleep(startup_timeout);
+        } catch(InterruptedException failure)
+        {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(failure);
+        }
+
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
@@ -276,6 +332,18 @@ public class MailTest {
 
     @Test
     public void invalidClientHostSuccess() throws Exception {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port().orElse(25);
+
+        try
+        {
+            Thread.sleep(startup_timeout);
+        } catch(InterruptedException failure)
+        {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(failure);
+        }
+
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
@@ -301,6 +369,18 @@ public class MailTest {
 
     @Test
     public void destinationMailboxSuccess() throws Exception {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port().orElse(25);
+
+        try
+        {
+            Thread.sleep(startup_timeout);
+        } catch(InterruptedException failure)
+        {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(failure);
+        }
+
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
@@ -332,6 +412,18 @@ public class MailTest {
 
     @Test
     public void sendDataIncompleteMailboxesSuccess() throws Exception {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port().orElse(25);
+
+        try
+        {
+            Thread.sleep(startup_timeout);
+        } catch(InterruptedException failure)
+        {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(failure);
+        }
+
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {

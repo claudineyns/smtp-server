@@ -1,4 +1,4 @@
-package io.github.rfc5321.server;
+package io.github.smtp.server;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -7,41 +7,44 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.Random;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.jboss.logging.Logger;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.TestInstance.Lifecycle;
 
-@TestInstance(Lifecycle.PER_CLASS)
+import io.github.smtp.configs.Configs;
+
+import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
+
+@QuarkusTest
 public class RelayTest {
-    static final String hostname = "localhost";
-    static final int port = 50000 + new Random().nextInt(1000);
-
-    SMTPAgent smtp;
-
-    @BeforeAll
-    public void startup() throws Exception {
-        System.setProperty("smtp.hostname", hostname);
-        System.setProperty("smtp.fqdn.whitelist", "relay");
-        System.setProperty("smtp.port", Integer.toString(port));
-
-        System.out.println("[DEBUG] Attempt to connect on port " + port);
-        smtp = new SMTPAgent().start();
-        Thread.sleep(2000);
-    }
-
-    @AfterAll
-    public void terminate() throws Exception {
-        smtp.stop();
-    }
-
     static final Charset ASCII = StandardCharsets.US_ASCII;
 
     static final int read_timeout = 1000;
     static final int connect_timeout = 2000;
+
+    @Inject
+    Configs configs;
+
+    @Inject
+    SMTPAgent server;
+
+    @Inject
+    Logger logger;
+
+    @BeforeEach
+    void start() throws Exception
+    {
+        server.start();
+    }
+
+    @AfterEach
+    void stop() throws Exception
+    {
+        server.stop();
+    }
 
     String content(final InputStream in) {
         final StringBuilder data = new StringBuilder("");
@@ -67,11 +70,27 @@ public class RelayTest {
     }
 
     @Test
-    public void relaySuccess() throws Exception {
+    public void relaySuccess() throws Exception
+    {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port().orElse(25);
+
+        logger.info("--- wait for server to start ---");
+
+        try
+        {
+            Thread.sleep(2000);
+        } catch(InterruptedException failure)
+        {
+            Thread.currentThread().interrupt();
+            throw new Exception(failure.getMessage());
+        }
+
+        logger.infof("--- will try connection on host %s and port %d ---", hostname, port);
+
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
-
             socket.setSoTimeout(read_timeout);
             socket.connect(socketAddress, connect_timeout);
 
