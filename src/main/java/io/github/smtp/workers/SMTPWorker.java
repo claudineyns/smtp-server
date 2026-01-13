@@ -160,11 +160,11 @@ public class SMTPWorker implements Runnable {
             return help();
         }
 
-        if (statement.toUpperCase().startsWith("HELO ")) {
+        if (statement.regionMatches(true, 0, "HELO ", 0, 5)) {
             return helo(statement, raw);
         }
 
-        if (statement.toUpperCase().startsWith("EHLO ")) {
+        if (statement.regionMatches(true, 0, "EHLO ", 0, 5)) {
             return ehlo(statement, raw);
         }
 
@@ -176,7 +176,7 @@ public class SMTPWorker implements Runnable {
             return verifyBadSintax();
         }
 
-        if (statement.toUpperCase().startsWith("VRFY ")) {
+        if (statement.regionMatches(true, 0, "VRFY ", 0, 5)) {
             return verify(statement, raw);
         }
 
@@ -184,7 +184,7 @@ public class SMTPWorker implements Runnable {
             return verifyBadSintax();
         }
 
-        if (statement.toUpperCase().startsWith("EXPN ")) {
+        if (statement.regionMatches(true, 0, "EXPN ", 0, 5)) {
             return expand(statement, raw);
         }
 
@@ -192,7 +192,7 @@ public class SMTPWorker implements Runnable {
             return authLogin();
         }
 
-        if (statement.toUpperCase().startsWith("AUTH LOGIN ")) {
+        if (statement.regionMatches(true, 0, "AUTH LOGIN ", 0, 11)) {
             return authLogin(statement, raw);
         }
 
@@ -200,7 +200,7 @@ public class SMTPWorker implements Runnable {
             return authPlain(statement, raw);
         }
 
-        if (statement.toUpperCase().startsWith("AUTH PLAIN ")) {
+        if (statement.regionMatches(true, 0, "AUTH PLAIN ", 0, 11)) {
             return authPlain(statement, raw);
         }
 
@@ -263,16 +263,34 @@ public class SMTPWorker implements Runnable {
      */
 
     private String remoteHost;
+    private String remoteAddress;
 
     private byte ehlo(final String statement, final byte[] raw) throws IOException {
         final String host = statement.substring(5);
 
-        // Validate Client host
-        try {
-            Inet4Address.getByName(host);
-            this.remoteHost = host;
-        } catch(UnknownHostException e) {
-            return unavailable();
+        if( host.startsWith("[") && host.endsWith("]") )
+        {
+            // Validate client IP
+            final String address = host.substring(1, host.length() - 1);
+            try
+            {
+                final var inetAddress = Inet4Address.getByName(address);
+                this.remoteHost = inetAddress.getHostName();
+                this.remoteAddress = inetAddress.getHostAddress();
+            } catch(UnknownHostException failure)
+            {
+                return unavailable();
+            }
+        } else 
+        {
+            // Validate Client host
+            try {
+                final var inetHost = Inet4Address.getByName(host);
+                this.remoteHost = inetHost.getHostName();
+                this.remoteAddress = inetHost.getHostAddress();
+            } catch(UnknownHostException e) {
+                return unavailable();
+            }
         }
 
         final List<String> responses = new ArrayList<>();
