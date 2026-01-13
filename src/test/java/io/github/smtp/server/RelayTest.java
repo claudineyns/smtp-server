@@ -1,4 +1,4 @@
-package io.github.rfc5321.server;
+package io.github.smtp.server;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -14,7 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.github.smtp.configs.Configs;
-import io.github.smtp.server.SMTPAgent;
+
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 
