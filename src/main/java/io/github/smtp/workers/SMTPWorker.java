@@ -281,8 +281,8 @@ public class SMTPWorker implements Runnable {
         responses.add("250-HELP");
         responses.add("250-AUTH PLAIN LOGIN");
         responses.add("250-ENHANCEDSTATUSCODES");
-        responses.add("250-8BITMIME");
-        responses.add("250 BINARYMIME");
+        responses.add("250 8BITMIME");
+        //responses.add("250 BINARYMIME");
         // responses.add("250 CHUNKING");
 
         for(final String line: responses)
@@ -770,31 +770,64 @@ public class SMTPWorker implements Runnable {
         return 0;
     }
 
+    final long MAX_MESSAGE_SIZE = 2 * 1024 * 1024;
     private void consumeData() throws IOException {
         final ByteArrayOutputStream data = new ByteArrayOutputStream();
 
-        int[] control = { -1, -1, -1, -1, -1 };
+        final int[] control = { -1, -1, -1, -1, -1 };
         int reader = -1;
         while ((reader = is.read()) != -1) {
-
             control[0] = control[1];
             control[1] = control[2];
             control[2] = control[3];
             control[3] = control[4];
             control[4] = reader;
 
-            if (control[0] == '\r'
-                    && control[1] == '\n'
-                    && control[2] == '.'
-                    && control[3] == '\r'
-                    && control[4] == '\n') {
-                data.flush();
+            if(     control[0] == '\r'
+                &&  control[1] == '\n'
+                &&  control[2] == '.'
+                &&  control[3] == '\r'
+                &&  control[4] == '\n'
+            )
+            {
                 dataReceived(data);
                 break;
             }
 
-            data.write(reader);
+            if( control[4] == '\n' )
+            {
+                if( control[3] == '\n' )
+                {
+                    data.write(control[3]);
+                }
 
+                continue;
+            }
+
+            if( control[4] == '\r' )
+            {
+                if(control[3] == '\r' || control[3] == '\n')
+                {
+                    data.write(control[3]);
+                }
+
+                continue;
+            }
+
+            if( control[4] == '.' )
+            {
+                if( control[2] == '\r' && control[3] == '\n' )
+                {
+                    continue;
+                }
+            }
+
+            if( control[3] == '\r' || control[3] == '\n' )
+            {
+                data.write(control[3]);
+            }
+
+            data.write(reader);
         }
 
     }
