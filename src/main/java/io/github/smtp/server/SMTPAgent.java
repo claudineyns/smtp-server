@@ -35,6 +35,11 @@ public class SMTPAgent {
 
 	public void start()
 	{
+		logger.infof("application.server.hostname = %s", fetchServiceHost() );
+		logger.infof("application.server.port = %s", getPort() );
+		logger.infof("application.server.external-port = %s", getExternalPort() );
+		logger.infof("application.content-folder = %s", fetchContentFolder() );
+
 		Executors.newSingleThreadExecutor().submit(() -> startServer());
 	}
 
@@ -74,6 +79,28 @@ public class SMTPAgent {
 		}
 	}
 
+	private String fetchServiceHost()
+	{
+		return configs.server().hostname()
+			.or( () -> UtilConfigs.OPTIONAL_HOSTNAME )
+			.orElseGet(this::getLocalhostName);
+	}
+
+	private Integer getExternalPort()
+	{
+		return configs.server().externalPort().orElseGet(this::getPort);
+	}
+
+	private Integer getPort()
+	{
+		return configs.server().port().orElse(DEFAULT_SMTP_PORT);
+	}
+
+	private String fetchContentFolder()
+	{
+		return configs.contentFolder().orElseGet(() -> System.getProperty("java.io.tmpdir"));
+	}
+
 	static final Integer DEFAULT_SMTP_PORT = 25;
 
 	private String serviceHost;
@@ -87,11 +114,9 @@ public class SMTPAgent {
 	private ExecutorService threads = Executors.newVirtualThreadPerTaskExecutor();
 
 	private void mountServers() throws IOException {
-        this.serviceHost = configs.server().hostname()
-			.or( () -> UtilConfigs.OPTIONAL_HOSTNAME )
-			.orElseGet(this::getLocalhostName);
+        this.serviceHost = fetchServiceHost();
 
-		this.servicePort = configs.server().port().orElse(DEFAULT_SMTP_PORT);
+		this.servicePort = getPort();
 
 		this.whitelist = AppUtils.listOf
 		(
@@ -99,9 +124,7 @@ public class SMTPAgent {
 		)
 		.orElseGet(()-> List.of("localhost"));
 
-		this.contentFolder = configs
-			.contentFolder()
-			.orElseGet(() -> System.getProperty("java.io.tmpdir"));
+		this.contentFolder = fetchContentFolder();
 
 		final var address = InetAddress.getByName(serviceHost);
 		final var socketAddress = new InetSocketAddress(address, servicePort);
