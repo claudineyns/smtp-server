@@ -340,19 +340,13 @@ public class SMTPWorker implements Runnable {
      */
 
     private byte authLogin() throws IOException {
-
-        StringBuilder response = null;
-
-        response = new StringBuilder();
-
-        final String usernameLabel = "'Username:"; // base64: VXNlcm5hbWU6
-        response
-            .append("334 ")
-            .append(Base64.getEncoder().encodeToString(usernameLabel.getBytes(StandardCharsets.US_ASCII)));
+        final String usernameLabel = "Username:"; // base64: VXNlcm5hbWU6
 
         logger.info("S: Awaiting for " + usernameLabel);
 
-        writeLine(os, response);
+        os.write(asciiraw("334 "));
+        os.write(Base64.getEncoder().encode(asciiraw(usernameLabel)));
+        os.write(ENDLINE);
         os.flush();
 
         String username = getContent();
@@ -382,21 +376,17 @@ public class SMTPWorker implements Runnable {
         this.username = new String(Base64.getDecoder().decode(username), StandardCharsets.US_ASCII);
         logger.info("C: Username: " + this.username);
 
-        StringBuilder response = new StringBuilder();
-
         final String passwordLabel = "Password:"; // base64: UGFzc3dvcmQ6
-        response
-                .append("334 ")
-                .append(Base64.getEncoder().encodeToString(passwordLabel.getBytes(StandardCharsets.US_ASCII)));
-
         logger.info("S: Awaiting for " + passwordLabel);
 
-        writeLine(os, response);
+        os.write(asciiraw("334 "));
+        os.write(Base64.getEncoder().encode(asciiraw(passwordLabel)));
+        os.write(ENDLINE);
         os.flush();
 
         final String password = getContent();
 
-        response = new StringBuilder();
+        final StringBuilder response = new StringBuilder();
 
         if (password.trim().isEmpty()) {
             response.append("535 5.7.8 Authentication credentials invalid");

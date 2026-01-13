@@ -1,17 +1,20 @@
 package io.github.smtp.server;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.CompletionException;
+
+import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +43,9 @@ public class MailTest {
     @Inject
     Vertx vertx;
 
+    @Inject
+    Logger logger;
+
     @BeforeEach
     void start() throws Exception
     {
@@ -54,6 +60,9 @@ public class MailTest {
 
     @Test
     public void sendMailSuccess() throws Exception {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port().orElse(25);
+
         final String username = "postmaster@example.com";
         final String password = "myp@77";
 
@@ -64,8 +73,14 @@ public class MailTest {
         text.append("\n\nEtiam scelerisque nec sem sit amet laoreet. Cras tincidunt eu nibh ullamcorper condimentum. Donec tempus ipsum et mi gravida rutrum. Vivamus sed neque ac elit placerat pretium. Pellentesque elementum est quis ex pulvinar interdum. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Nullam pellentesque vel urna nec lobortis. Maecenas vel diam odio. Vestibulum a dui nec lorem malesuada volutpat in non purus. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin interdum fringilla erat vitae pellentesque. Fusce tincidunt consequat venenatis. Proin tempus placerat leo sit amet luctus. Integer eu consectetur tortor. Mauris vestibulum dolor eu nunc sagittis, eu facilisis libero viverra. Praesent sollicitudin tellus ac scelerisque congue.");
         text.append("\n\nCurabitur sit amet mollis ex, vulputate fermentum odio. Aliquam cursus urna purus, vel convallis arcu ullamcorper in. Phasellus commodo finibus lorem sit amet pretium. Vivamus porttitor est vel consectetur pharetra. Interdum et malesuada fames ac ante ipsum primis in faucibus. Aenean sed arcu tempus, ullamcorper quam a, euismod odio. Aenean eget vestibulum massa, id sagittis lectus.");
 
-        final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final HttpClient http = HttpClient.newHttpClient();
+
+        // Lista da OpenAI
+        final HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("https://www.rfc-editor.org/rfc/pdfrfc/rfc6152.txt.pdf"))
+                .build();
+
+        final byte[] raw = http.send(request, HttpResponse.BodyHandlers.ofByteArray()).body();
 
         final MailConfig config = new MailConfig()
                 .setHostname(hostname)
@@ -78,12 +93,8 @@ public class MailTest {
 
         final MailClient client = MailClient.create(vertx, config);
 
-        final var raw = new ByteArrayOutputStream();
-        final Path path = Path.of(URI.create("https://www.rfc-editor.org/rfc/pdfrfc/rfc6152.txt.pdf"));
-        Files.copy(path, raw);
-
         final MailAttachment attachment = MailAttachment.create()
-                .setData(Buffer.buffer(raw.toByteArray()))
+                .setData(Buffer.buffer(raw))
                 .setName("rfc6152.txt.pdf")
                 .setContentType("application/pdf") // Ajuste conforme o tipo do arquivo
                 .setDisposition("attachment");
@@ -96,10 +107,15 @@ public class MailTest {
                 .setAttachment(List.of(attachment));
 
         // 4. Enviar e aguardar (importante para @QuarkusMain não fechar antes)
-        client.sendMail(message)
-              .await().indefinitely();
-        
-        System.out.println("E-mail enviado com sucesso!");        
+        try
+        {
+            client.sendMail(message).await().indefinitely();
+            logger.info("E-mail enviado com sucesso!");
+        } catch(CompletionException failure)
+        {
+            logger.warn(failure.getMessage());
+        }
+
     }
 
     static final Charset ASCII = StandardCharsets.US_ASCII;
