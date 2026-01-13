@@ -104,7 +104,7 @@ public class SMTPAgent {
 	static final Integer DEFAULT_SMTP_PORT = 25;
 
 	private String serviceHost;
-
+	private String serviceAddress;
 	private Integer servicePort;
 
 	private List<String> whitelist;
@@ -131,6 +131,8 @@ public class SMTPAgent {
 
 		this.server = new ServerSocket();
 		this.server.bind(socketAddress);
+		
+		this.serviceAddress = server.getInetAddress().getHostAddress();
 
 		final var executorService = Executors.newFixedThreadPool(2);
 
@@ -145,13 +147,15 @@ public class SMTPAgent {
 			Socket client = null;
 			try {
 				client = server.accept();
-				logger.trace("--- Server got new connection ---");
 			} catch (IOException e) {
 				break;
 			}
 
+			logger.info("\n");
+			logger.trace("--- Server got new connection ---");
+
 			this.threads.submit(
-				new SMTPWorker(client, UUID.randomUUID(), whitelist)
+				new SMTPWorker(client, this.serviceAddress, UUID.randomUUID(), whitelist)
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 			);

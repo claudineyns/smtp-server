@@ -6,9 +6,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.Inet4Address;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -35,25 +33,40 @@ public class SMTPWorker implements Runnable {
 
     private String clientHost;
     private String clientAddress;
+
+    private String serverAddress;
     
     private final String timestamp;
     
     private final List<String> whiteList = new LinkedList<>();
     
-    public SMTPWorker(final Socket socket, final UUID id, final List<String> whiteList)
+    public SMTPWorker(
+        final Socket socket,
+        final String serverAddress,
+        final UUID id,
+        final List<String> whiteList
+    )
     {
         this.socket = socket;
+        this.serverAddress = serverAddress;
         this.sessionId = id;
         this.whiteList.addAll(whiteList);
-        
+
         this.timestamp = ZonedDateTime
             .now(ZoneId.systemDefault())
             .format(DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US));
 
-        this.clientHost = socket.getInetAddress().getHostAddress();
-        this.clientAddress = socket.getInetAddress().getHostName();
+        final var remoteInetAddress = socket.getInetAddress();
+        this.clientHost = remoteInetAddress.getHostAddress();
+        this.clientAddress = remoteInetAddress.getHostName();
 
-        logger.debugf("Connection from %s [%s]", this.clientHost, this.clientAddress);
+        if(this.clientAddress.equals(this.clientHost))
+        {
+            logger.debugf("Remote peer: %s", this.clientAddress);
+        } else
+        {
+            logger.debugf("Remote peer: %s [%s]", this.clientAddress, this.clientHost);
+        }
     }
 
     private String hostname;
@@ -102,7 +115,7 @@ public class SMTPWorker implements Runnable {
             logger.warn(failure.getMessage());
         }
 
-        logger.debug("--- connection closed ---");
+        logger.debugf("Remote peer: %s --- connection closed", this.clientAddress);
     }
 
     private void process() throws IOException {
@@ -224,32 +237,13 @@ public class SMTPWorker implements Runnable {
             return rset();
         }
 
-        return unavailable();
+        return invalidCommand();
     }
 
     private byte help() throws IOException {
         final StringBuilder response = new StringBuilder();
 
-        response.append("211 EHLO HELO VRFY EXPN AUTH MAIL RCPT DATA HELP");
-        logger.trace(response);
-
-        writeLine(os, response);
-        os.flush();
-
-        return 0;
-    }
-
-    private byte helo(final String statement, final byte[] raw) throws IOException {
-        final String host = statement.substring(5);
-
-        // Validate Client host
-        try {
-            Inet4Address.getByName(host);
-        } catch(UnknownHostException e) {
-            return unavailable();
-        }
-
-        final String response = "250 " + this.hostname + " greets " + host;
+        response.append("211 2.0.0 EHLO HELO NOOP RSET VRFY EXPN AUTH MAIL RCPT DATA HELP");
         logger.infof("S: %s", response);
 
         writeLine(os, response);
@@ -262,40 +256,57 @@ public class SMTPWorker implements Runnable {
      * https://www.rfc-editor.org/rfc/rfc2821#page-45
      */
 
-    private String remoteHost;
-    private String remoteAddress;
+    private String introductionHost;
 
-    private byte ehlo(final String statement, final byte[] raw) throws IOException {
-        final String host = statement.substring(5);
-
+    private byte checkIntroduction(final String host)
+    {
+        this.introductionHost = host;
         if( host.startsWith("[") && host.endsWith("]") )
         {
             // Validate client IP
-            final String address = host.substring(1, host.length() - 1);
-            try
-            {
-                final var inetAddress = Inet4Address.getByName(address);
-                this.remoteHost = inetAddress.getHostName();
-                this.remoteAddress = inetAddress.getHostAddress();
-            } catch(UnknownHostException failure)
-            {
-                return unavailable();
-            }
-        } else 
+            this.introductionHost = host.substring(1, host.length() - 1);
+        }
+
+        if( this.serverAddress.equals(this.introductionHost)
+                || this.hostname.equals(this.introductionHost)
+                || "127.0.0.1".equals(this.introductionHost))
         {
-            // Validate Client host
-            try {
-                final var inetHost = Inet4Address.getByName(host);
-                this.remoteHost = inetHost.getHostName();
-                this.remoteAddress = inetHost.getHostAddress();
-            } catch(UnknownHostException e) {
-                return unavailable();
-            }
+            return 1;
+        }
+
+        return 0;
+    }
+
+    private byte helo(final String statement, final byte[] raw) throws IOException {
+        final String host = statement.substring(5);
+        final byte q = checkIntroduction(host);
+
+        if(q == 1)
+        {
+            return securityPolicy();
+        }
+
+        final String response = "250 " + this.hostname + " greets " + this.introductionHost;
+        logger.infof("S: %s", response);
+
+        writeLine(os, response);
+        os.flush();
+
+        return 0;
+    }
+
+    private byte ehlo(final String statement, final byte[] raw) throws IOException {
+        final String host = statement.substring(5);
+        final byte q = checkIntroduction(host);
+
+        if(q == 1)
+        {
+            return securityPolicy();
         }
 
         final List<String> responses = new ArrayList<>();
 
-        responses.add("250-" + this.hostname + " greets " + this.remoteHost);
+        responses.add("250-" + this.hostname + " greets " + this.introductionHost);
         responses.add("250-HELP");
         responses.add("250-AUTH PLAIN LOGIN");
         responses.add("250-ENHANCEDSTATUSCODES");
@@ -568,7 +579,7 @@ public class SMTPWorker implements Runnable {
     private Mailbox sender = null;
 
     private byte mailFrom(final String statement, final byte[] raw) throws IOException {
-        if(this.remoteHost == null) {
+        if(this.introductionHost == null) {
             return introductionMissing();
         }
 
@@ -622,7 +633,7 @@ public class SMTPWorker implements Runnable {
     private List<Mailbox> recipients = new LinkedList<>();
 
     private byte rcptTo(final String statement, final byte[] raw) throws IOException {
-        if(this.remoteHost == null)
+        if(this.introductionHost == null)
         {
             return introductionMissing();
         }
@@ -680,7 +691,7 @@ public class SMTPWorker implements Runnable {
     }
 
     private byte noop() throws IOException {
-        final String response = "250 2.0.0 OK";
+        final String response = "211 2.0.0 OK";
         logger.infof("S: %s", response);
 
         writeLine(os, response);
@@ -692,7 +703,7 @@ public class SMTPWorker implements Runnable {
     // https://stackoverflow.com/questions/25710599/content-transfer-encoding-7bit-or-8-bit
 
     private byte data() throws IOException {
-        if(this.remoteHost == null) {
+        if(this.introductionHost == null) {
             return introductionMissing();
         }
 
@@ -708,7 +719,6 @@ public class SMTPWorker implements Runnable {
             response.append(SmtpError.DESTINATION_MISSING);
         } else {
             dataInProgress = true;
-            // response.append("354 Start mail input; end with <CRLF>.<CRLF>\r\n");
             response.append("354 I am ready, send 8BITMIME message, ending in <CRLF>.<CRLF>");
         }
 
@@ -733,13 +743,31 @@ public class SMTPWorker implements Runnable {
         return 0;
     }
 
+    private byte invalidCommand() throws IOException {
+        logger.infof("S: %s", SmtpError.INVALID_COMMAND);
+
+        writeLine(os, SmtpError.INVALID_COMMAND);
+        os.flush();
+
+        return 0;
+    }
+
+    private byte securityPolicy() throws IOException {
+        logger.infof("S: %s", SmtpError.SECURITY_POLICY);
+
+        writeLine(os, SmtpError.SECURITY_POLICY);
+        os.flush();
+
+        return 0;
+    }
+
     private byte rset() throws IOException {
         this.authenticated = false;
         this.fromHost = null;
         this.toHost = null;
         this.recipients.clear();
 
-        final String response = "250 2.1.0 OK";
+        final String response = "250 2.0.0 OK";
         logger.infof("S: %s", response);
 
         writeLine(os, response);
@@ -751,9 +779,7 @@ public class SMTPWorker implements Runnable {
     private byte quit() throws IOException {
         final List<String> responses = new ArrayList<>();
 
-        responses.add("221-2.0.0 Thank you for your cooperation");
-        responses.add("221-2.0.0 " + this.hostname + " Service closing transmission channel");
-        responses.add("221 2.0.0 Goodbye");
+        responses.add("221 2.0.0 " + this.hostname + " Service closing transmission channel");
 
         for(final String line: responses)
         {
