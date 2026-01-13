@@ -14,7 +14,8 @@ public enum SmtpError {
     SENDER_ALREADY_SPECIFIED("503", "5.5.1", "Sender already specified"),
     UNAVAILABLE("502", "5.0.0", "Unavailable"),
     INVALID_COMMAND("500", "5.5.1", "Invalid command"),
-    INTRODUCTION_MISSING("554", "5.0.0", "Please, introduce yourself"),
+    INTRODUCTION_MISSING("503", "5.5.1", "Please, introduce yourself"),
+    SECURITY_POLICY("550", "5.7.1", "Security policy")
     ;
 
     private String code;
