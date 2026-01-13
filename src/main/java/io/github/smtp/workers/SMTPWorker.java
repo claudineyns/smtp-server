@@ -480,7 +480,7 @@ public class SMTPWorker implements Runnable {
         if (credential.trim().isEmpty()) {
             response.append(SmtpError.INVALID_CREDENTIALS);
         } else {
-            final byte[] source = asciiraw('\0' + LOCAL_USERNAME + "\0" + LOCAL_PASSWORD);
+            final byte[] source = asciiraw("\0" + LOCAL_USERNAME + "\0" + LOCAL_PASSWORD);
             final String validCredential = Base64.getEncoder().encodeToString(source);
             if (validCredential.equals(credential)) {
                 this.authenticated = true;
