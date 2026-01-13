@@ -7,6 +7,8 @@ import io.smallrye.config.ConfigMapping;
 @ConfigMapping(prefix = "application")
 public interface Configs
 {
+    Optional<String> contentFolder();
+
     Server server();
 
     interface Server
@@ -23,6 +25,7 @@ public interface Configs
         {
             Optional<String> whitelist();
         }
+
     }
 
 }

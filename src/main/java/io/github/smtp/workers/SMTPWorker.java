@@ -18,10 +18,7 @@ import java.util.Base64;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
 import org.jboss.logging.Logger;
 
 public class SMTPWorker implements Runnable {
@@ -36,80 +33,79 @@ public class SMTPWorker implements Runnable {
 
     private String clientHost;
     private String clientAddress;
-    private String hostname;
-    private String contentFolder;
-
+    
     private final String timestamp;
-
+    
     private final List<String> whiteList = new LinkedList<>();
-
-    public SMTPWorker(final Socket socket, final UUID id, final List<String> whiteList) {
+    
+    public SMTPWorker(final Socket socket, final UUID id, final List<String> whiteList)
+    {
         this.socket = socket;
         this.sessionId = id;
         this.whiteList.addAll(whiteList);
-
-        this.timestamp = ZonedDateTime.now(ZoneId.systemDefault())
-                .format(DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US));
+        
+        this.timestamp = ZonedDateTime
+            .now(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US));
 
         this.clientHost = socket.getInetAddress().getHostAddress();
         this.clientAddress = socket.getInetAddress().getHostName();
 
         logger.debugf("Connection from %s [%s]", this.clientHost, this.clientAddress);
-
-        this.contentFolder = Optional
-                .ofNullable(System.getenv("SMTP_LOG_FOLDER"))
-                .orElse(Optional
-                        .ofNullable(System.getProperty("smtp.log.folder"))
-                        .orElse(System.getProperty("java.io.tmpdir")));
-
     }
 
+    private String hostname;
     public SMTPWorker setHostname(final String hostname)
     {
         this.hostname = hostname;
-
         return this;
     }
 
-    private long last = 0;
-    private Object _self = this;
-    private boolean closed = false;
-
-    public void run() {
-        CompletableFuture.runAsync(() -> checkClosure());
-
-        processRequest();
+    private String contentFolder;
+    public SMTPWorker setContentFolder(final String contentFolder)
+    {
+        this.contentFolder = contentFolder;
+        return this;
     }
 
-    private void checkClosure() {
-        while (!closed) {
-            last = System.currentTimeMillis();
-            try {
-                synchronized (_self) {
-                    _self.wait(40000);
-                }
-            } catch (InterruptedException e) {
-            }
-            if ((System.currentTimeMillis() - last) > 30000) {
-                close();
-                break;
-            }
-        }
+    public void run()
+    {
+        processRequest();
     }
 
     private void processRequest() {
         try {
             process();
-        } catch (IOException e) {
-            System.err.println(e.getMessage());
+        } catch (IOException failure) {
+            logger.warn(failure.getMessage());
         } finally {
-            if (!closed) {
-                close();
-            }
+            close();
         }
     }
 
+    private void close()
+    {
+        try {
+            logger.trace("--- shutting down connection ---");
+            socket.shutdownOutput();
+        } catch(IOException failure)
+        {
+            logger.warn(failure.getMessage());
+        }
+
+        try {
+            socket.close();
+        } catch(IOException failure)
+        {
+            logger.warn(failure.getMessage());
+        }
+
+        logger.debug("--- connection closed ---");
+    }
+
     private void process() throws IOException {
+        socket.setSoTimeout(30000);
+
         is = socket.getInputStream();
         os = socket.getOutputStream();
         startPresentation();
@@ -136,7 +132,7 @@ public class SMTPWorker implements Runnable {
             }
             if (reader == '\n') {
                 try {
-                    checkStatement(st);
+                    checkStatement(st.toByteArray());
                 } catch (IOException e) {
                     break;
                 }
@@ -149,14 +145,7 @@ public class SMTPWorker implements Runnable {
         return 0;
     }
 
-    private byte checkStatement(final ByteArrayOutputStream os) throws IOException {
-
-        last = System.currentTimeMillis();
-        synchronized (_self) {
-            _self.notifyAll();
-        }
-
-        final byte[] raw = os.toByteArray();
+    private byte checkStatement(final byte[] raw) throws IOException {
         final String statement = new String(raw, StandardCharsets.US_ASCII);
 
         logger.infof("C: %s", statement);
@@ -768,18 +757,6 @@ public class SMTPWorker implements Runnable {
         os.flush();
 
         return 0;
-    }
-
-    private void close() {
-        try {
-            if (!this.closed) {
-                this.closed = true;
-                socket.close();
-            }
-        } catch (IOException e) {
-        }
-
-        logger.trace("Connection closed");
     }
 
     private void consumeData() throws IOException {

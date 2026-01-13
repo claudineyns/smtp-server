@@ -82,6 +82,8 @@ public class SMTPAgent {
 
 	private List<String> whitelist;
 
+	private String contentFolder;
+
 	private ExecutorService threads = Executors.newVirtualThreadPerTaskExecutor();
 
 	private void mountServers() throws IOException {
@@ -96,6 +98,10 @@ public class SMTPAgent {
 			configs.server().fqdn().flatMap(Configs.Server.Fqdn::whitelist)
 		)
 		.orElseGet(()-> List.of("localhost"));
+
+		this.contentFolder = configs
+			.contentFolder()
+			.orElseGet(() -> System.getProperty("java.io.tmpdir"));
 
 		final var address = InetAddress.getByName(serviceHost);
 		final var socketAddress = new InetSocketAddress(address, servicePort);
@@ -124,6 +130,7 @@ public class SMTPAgent {
 			this.threads.submit(
 				new SMTPWorker(client, UUID.randomUUID(), whitelist)
 					.setHostname(this.serviceHost)
+					.setContentFolder(this.contentFolder)
 			);
 		}
 
