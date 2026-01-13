@@ -554,6 +554,11 @@ public class SMTPWorker implements Runnable {
             return introductionMissing();
         }
 
+        if(this.sender != null)
+        {
+            return senderAlreadySpecified();
+        }
+
         final String mailbox = statement.substring(10);
 
         String name = "";
@@ -678,7 +683,7 @@ public class SMTPWorker implements Runnable {
         final StringBuilder response = new StringBuilder();
 
         if (this.fromHost == null && this.toHost == null) {
-            response.append(SmtpError.INVALID_RECIPIENTS);
+            response.append(SmtpError.RECIPIENTS_MISSING);
         } else if (this.fromHost == null) {
             response.append(SmtpError.SENDER_MISSING);
         } else if (this.toHost == null) {
@@ -751,6 +756,15 @@ public class SMTPWorker implements Runnable {
         logger.infof("S: %s", SmtpError.INTRODUCTION_MISSING);
 
         writeLine(os, SmtpError.INTRODUCTION_MISSING);
+        os.flush();
+
+        return 0;
+    }
+
+    private byte senderAlreadySpecified() throws IOException {
+        logger.infof("S: %s", SmtpError.SENDER_ALREADY_SPECIFIED);
+
+        writeLine(os, SmtpError.SENDER_ALREADY_SPECIFIED);
         os.flush();
 
         return 0;
