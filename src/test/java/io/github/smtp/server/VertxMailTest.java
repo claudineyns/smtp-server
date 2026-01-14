@@ -92,7 +92,7 @@ public class VertxMailTest {
             .setDisposition("attachment");
 
         final MailMessage message = new MailMessage()
-            .setFrom("pel\u00EA@example.com")
+            .setFrom("pel\u009A@example.com")
             .setTo(List.of("johndoe@example.com", "janedoe@example.com", "jsmith@example.com"))
             .setSubject("Testing Plain Email")
             .setHtml(text.toString())
