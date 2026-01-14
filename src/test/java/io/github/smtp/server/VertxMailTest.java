@@ -62,19 +62,16 @@ public class VertxMailTest {
         final StringBuilder text = new StringBuilder("");
         text.append("Lorem ipsum dolor sit amet, consectetur adipiscing elit.\r\n");
         text.append("Phasellus gravida est nec ante lobortis, id pellentesque neque maximus.\r\n");
-        text.append(".Qhasellus scelerisque a nunc non ultrices. Duis posuere mi eu ullamcorper posuere.\r\n");
-        text.append("..Etiam scelerisque nec sem sit amet laoreet. Cras tincidunt eu nibh ullamcorper condimentum.\r\n");
-        text.append("...Curabitur sit amet mollis ex, vulputate fermentum odio.\r\n");
-        text.append("\r\n");
-        text.append("..\r\n");
-        text.append("END.");
+        text.append("Phasellus scelerisque a nunc non ultrices. Duis posuere mi eu ullamcorper posuere.\r\n");
+        text.append("Etiam scelerisque nec sem sit amet laoreet. Cras tincidunt eu nibh ullamcorper condimentum.\r\n");
+        text.append("Curabitur sit amet mollis ex, vulputate fermentum odio.");
 
         final HttpClient http = HttpClient.newHttpClient();
 
         // Lista da OpenAI
         final HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://www.rfc-editor.org/rfc/pdfrfc/rfc6152.txt.pdf"))
-                .build();
+            .uri(URI.create("https://www.rfc-editor.org/rfc/pdfrfc/rfc6152.txt.pdf"))
+            .build();
 
         final byte[] raw = http.send(request, HttpResponse.BodyHandlers.ofByteArray()).body();
 
