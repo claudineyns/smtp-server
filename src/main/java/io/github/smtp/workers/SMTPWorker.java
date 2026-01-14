@@ -57,8 +57,9 @@ public class SMTPWorker implements Runnable {
             .format(DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US));
 
         final var remoteInetAddress = socket.getInetAddress();
-        this.clientHost = remoteInetAddress.getHostAddress();
-        this.clientAddress = remoteInetAddress.getHostName();
+
+        this.clientAddress = remoteInetAddress.getHostAddress();
+        this.clientHost = remoteInetAddress.getCanonicalHostName();
     }
 
     private String hostname;
@@ -257,37 +258,12 @@ public class SMTPWorker implements Runnable {
      * https://www.rfc-editor.org/rfc/rfc5321#section-4.2.3
      */
 
-    private String introductionHost;
-
-    private byte checkIntroduction(final String host)
-    {
-        this.introductionHost = host;
-        if( host.startsWith("[") && host.endsWith("]") )
-        {
-            // Validate client IP
-            this.introductionHost = host.substring(1, host.length() - 1);
-        }
-
-        if( this.serverAddress.equals(this.introductionHost)
-                || this.hostname.equals(this.introductionHost)
-                || "127.0.0.1".equals(this.introductionHost))
-        {
-            return 1;
-        }
-
-        return 0;
-    }
+    private String heloHost;
 
     private byte helo(final String statement, final byte[] raw) throws IOException {
-        final String host = statement.substring(5);
-        final byte q = checkIntroduction(host);
+        this.heloHost = statement.substring(5);
 
-        if(q == 1)
-        {
-            return securityPolicy();
-        }
-
-        final String response = "250 " + this.hostname + " greets " + this.introductionHost;
+        final String response = "250 " + this.hostname + " greets " + this.heloHost;
         logger.infof("S: %s", response);
 
         writeLine(os, response);
@@ -297,17 +273,11 @@ public class SMTPWorker implements Runnable {
     }
 
     private byte ehlo(final String statement, final byte[] raw) throws IOException {
-        final String host = statement.substring(5);
-        final byte q = checkIntroduction(host);
-
-        if(q == 1)
-        {
-            return securityPolicy();
-        }
+        this.heloHost = statement.substring(5);
 
         final List<String> responses = new ArrayList<>();
 
-        responses.add("250-" + this.hostname + " greets " + this.introductionHost);
+        responses.add("250-" + this.hostname + " greets " + this.heloHost);
         responses.add("250-HELP");
         responses.add("250-AUTH LOGIN PLAIN");
         responses.add("250-AUTH=LOGIN PLAIN");
@@ -581,7 +551,7 @@ public class SMTPWorker implements Runnable {
     private Mailbox sender = null;
 
     private byte mailFrom(final String statement, final byte[] raw) throws IOException {
-        if(this.introductionHost == null) {
+        if(this.heloHost == null) {
             return introductionMissing();
         }
 
@@ -635,7 +605,7 @@ public class SMTPWorker implements Runnable {
     private List<Mailbox> recipients = new LinkedList<>();
 
     private byte rcptTo(final String statement, final byte[] raw) throws IOException {
-        if(this.introductionHost == null)
+        if(this.heloHost == null)
         {
             return introductionMissing();
         }
@@ -705,7 +675,7 @@ public class SMTPWorker implements Runnable {
     // https://stackoverflow.com/questions/25710599/content-transfer-encoding-7bit-or-8-bit
 
     private byte data() throws IOException {
-        if(this.introductionHost == null) {
+        if(this.heloHost == null) {
             return introductionMissing();
         }
 
@@ -834,58 +804,86 @@ public class SMTPWorker implements Runnable {
                 break;
             }
 
-            if( control[4] == '\n' )
-            {
-                if( control[3] == '\n' )
-                {
-                    data.write(control[3]);
-                    control[3] = -1;
-                }
-
-                continue;
-            }
-
-            if( control[4] == '\r' )
-            {
-                if(control[3] == '\r' || control[3] == '\n')
-                {
-                    data.write(control[3]);
-                    control[3] = -1;
-                }
-
-                continue;
-            }
-
-            if(     control[4] == '.'
-                &&  control[3] == '\n'
-                &&  control[2] == '\r' )
-            {
-                continue;
-            }
-
-            if(     control[3] == '.'
+            if(     control[1] == '\r'
                 &&  control[2] == '\n'
-                &&  control[1] == '\r' )
+                &&  control[3] == '.'
+                &&  control[4] == '\r'
+            )
+            {
+                continue;
+            }
+
+            if(     control[2] == '\r'
+                &&  control[3] == '\n'
+                &&  control[4] == '.'
+            )
+            {
+                continue;
+            }
+
+            if(     control[3] == '\r'
+                &&  control[4] == '\n'
+            )
+            {
+                continue;
+            }
+
+            if(control[4] == '\r')
+            {
+                if(control[3] == '\r')
+                {
+                    data.write(control[3]);
+                    control[3] = 0;
+                }
+
+                continue;
+            }
+
+            if(     control[2] == '\r'
+                &&  control[3] == '\n'
+            )
+            {
+                data.write(control[2]);
+                control[2] = 0;
+
+                data.write(control[3]);
+                control[3] = 0;
+            }
+
+            if(     control[1] == '\r'
+                &&  control[2] == '\n'
+                &&  control[3] == '.'
+            )
             {
                 data.write(control[1]);
+                control[1] = 0;
+
                 data.write(control[2]);
-                control[1] = -1;
-                control[2] = -1;
+                control[2] = 0;
+
+                control[3] = 0;
             }
 
-            if( control[2] == '\r' || control[2] == '\n' )
+            if(     control[0] == '\r'
+                &&  control[1] == '\n'
+                &&  control[2] == '.'
+                &&  control[3] == '\r'
+            )
             {
-                data.write(control[2]);
-                control[2] = -1;
-            }
+                data.write(control[0]);
+                control[0] = 0;
 
-            if( control[3] == '\r' || control[3] == '\n' )
-            {
+                data.write(control[1]);
+                control[1] = 0;
+
+                control[2] = 0;
+
                 data.write(control[3]);
-                control[3] = -1;
+                control[3] = 0;
             }
 
-            data.write(reader);
+            data.write(control[4]);
+            control[4] = 0;
         }
 
     }

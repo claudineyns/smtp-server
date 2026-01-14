@@ -60,11 +60,14 @@ public class VertxMailTest {
         final String password = "myp@77";
 
         final StringBuilder text = new StringBuilder("");
-        text.append("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin interdum, turpis ut sollicitudin malesuada, nisi purus molestie ligula, id cursus mauris sapien quis urna. Nulla dui diam, sagittis non feugiat vitae, ultricies a odio. Duis congue enim sit amet metus elementum, mattis egestas erat molestie. Ut vel porta leo. Proin in risus bibendum, bibendum nulla quis, semper dui. Nulla aliquam tristique egestas. Quisque non magna sagittis, vulputate nunc sed, dictum tortor. Fusce ligula quam, efficitur sit amet justo non, laoreet commodo risus. Aliquam nec ante ac nulla vestibulum fermentum non eu leo. Quisque nec odio a tortor imperdiet volutpat id sit amet nulla. Suspendisse consequat hendrerit mattis.");
-        text.append("\n\nPhasellus gravida est nec ante lobortis, id pellentesque neque maximus. Curabitur pharetra eu urna at egestas. Morbi finibus lacus in neque rutrum accumsan. Sed vehicula nec magna et finibus. Curabitur mauris sem, dictum vitae ante rutrum, posuere consequat erat. Curabitur lacinia risus imperdiet nulla fringilla faucibus. Nam placerat lacinia urna lacinia sollicitudin. Ut iaculis nibh magna, id faucibus diam vehicula non. Nunc posuere tincidunt leo sed fermentum. Nulla in nulla nulla. Phasellus vel felis odio.");
-        text.append("\n\nPhasellus scelerisque a nunc non ultrices. Duis posuere mi eu ullamcorper posuere. Maecenas a sagittis enim. Donec leo ligula, convallis id interdum et, venenatis id orci. Aliquam vestibulum blandit felis et porttitor. Integer commodo porttitor faucibus. Integer felis odio, dictum at lacus a, vulputate dignissim sem. Suspendisse eleifend ornare tellus sit amet tincidunt. Nam sollicitudin volutpat risus, at placerat est pulvinar at. Vestibulum vitae cursus orci, et sodales nisl. Vestibulum blandit lorem vel erat dictum tempus. Vestibulum eu dapibus turpis.");
-        text.append("\n\nEtiam scelerisque nec sem sit amet laoreet. Cras tincidunt eu nibh ullamcorper condimentum. Donec tempus ipsum et mi gravida rutrum. Vivamus sed neque ac elit placerat pretium. Pellentesque elementum est quis ex pulvinar interdum. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Nullam pellentesque vel urna nec lobortis. Maecenas vel diam odio. Vestibulum a dui nec lorem malesuada volutpat in non purus. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Proin interdum fringilla erat vitae pellentesque. Fusce tincidunt consequat venenatis. Proin tempus placerat leo sit amet luctus. Integer eu consectetur tortor. Mauris vestibulum dolor eu nunc sagittis, eu facilisis libero viverra. Praesent sollicitudin tellus ac scelerisque congue.");
-        text.append("\n\nCurabitur sit amet mollis ex, vulputate fermentum odio. Aliquam cursus urna purus, vel convallis arcu ullamcorper in. Phasellus commodo finibus lorem sit amet pretium. Vivamus porttitor est vel consectetur pharetra. Interdum et malesuada fames ac ante ipsum primis in faucibus. Aenean sed arcu tempus, ullamcorper quam a, euismod odio. Aenean eget vestibulum massa, id sagittis lectus.");
+        text.append("Lorem ipsum dolor sit amet, consectetur adipiscing elit.\r\n");
+        text.append("Phasellus gravida est nec ante lobortis, id pellentesque neque maximus.\r\n");
+        text.append(".Phasellus scelerisque a nunc non ultrices. Duis posuere mi eu ullamcorper posuere.\r\n");
+        text.append("..Etiam scelerisque nec sem sit amet laoreet. Cras tincidunt eu nibh ullamcorper condimentum.\r\n");
+        text.append("...Curabitur sit amet mollis ex, vulputate fermentum odio.\r\n");
+        text.append("\r\n");
+        text.append("..\r\n");
+        text.append("END.");
 
         final HttpClient http = HttpClient.newHttpClient();
 
