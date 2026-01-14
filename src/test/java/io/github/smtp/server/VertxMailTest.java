@@ -5,8 +5,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
-import java.util.concurrent.CompletionException;
-
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -76,38 +74,32 @@ public class VertxMailTest {
         final byte[] raw = http.send(request, HttpResponse.BodyHandlers.ofByteArray()).body();
 
         final MailConfig config = new MailConfig()
-                .setHostname(hostname)
-                .setPort(port)
-                .setLogin(LoginOption.REQUIRED)
-                .setStarttls(StartTLSOptions.REQUIRED)
-                //.setStarttls(StartTLSOptions.DISABLED)
-                .setTrustAll(true)
-                .setUsername(username)
-                .setPassword(password);
+            .setOwnHostname("quarkus-mailer.example.com")
+            .setHostname(hostname)
+            .setPort(port)
+            .setLogin(LoginOption.REQUIRED)
+            .setStarttls(StartTLSOptions.REQUIRED)
+            .setTrustAll(true)
+            .setUsername(username)
+            .setPassword(password);
 
         final MailClient client = MailClient.create(vertx, config);
 
         final MailAttachment attachment = MailAttachment.create()
-                .setData(Buffer.buffer(raw))
-                .setName("rfc6152.pdf")
-                .setContentType("application/pdf")
-                .setDisposition("attachment");
+            .setData(Buffer.buffer(raw))
+            .setName("rfc6152.pdf")
+            .setContentType("application/pdf")
+            .setDisposition("attachment");
 
         final MailMessage message = new MailMessage()
-                .setFrom(username)
-                .setTo(List.of("johndoe@example.com", "janedoe@example.com", "jsmith@example.com"))
-                .setSubject("Testing Plain Email")
-                .setHtml(text.toString())
-                .setAttachment(List.of(attachment));
+            .setFrom("pel\u00EA@example.com")
+            .setTo(List.of("johndoe@example.com", "janedoe@example.com", "jsmith@example.com"))
+            .setSubject("Testing Plain Email")
+            .setHtml(text.toString())
+            .setAttachment(List.of(attachment));
         
-        try
-        {
-            client.sendMail(message).await().indefinitely();
-            logger.info("E-mail enviado com sucesso!");
-        } catch(CompletionException failure)
-        {
-            logger.warn(failure.getMessage());
-        }
+        client.sendMail(message).await().indefinitely();
+        client.closeAndAwait();
     }
 
 }

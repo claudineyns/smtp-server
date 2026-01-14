@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
-
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -194,7 +193,7 @@ public class SMTPWorker implements Runnable {
     }
 
     private byte checkStatement(final byte[] raw) throws IOException {
-        final String statement = new String(raw, StandardCharsets.US_ASCII);
+        final String statement = new String(raw, StandardCharsets.UTF_8);
 
         logger.infof("C: %s", statement);
 
@@ -323,18 +322,17 @@ public class SMTPWorker implements Runnable {
             responses.add("250-STARTTLS");
         }
         responses.add("250-HELP");
+        responses.add("250-SMTPUTF8");
         responses.add("250 8BITMIME");
 
+        final var accumulator = new StringBuilder();
         for(final String line: responses)
         {
             logger.infof("S: %s", line);
+            accumulator.append(line).append("\r\n");
         }
 
-        for(final String line: responses)
-        {
-            writeLine(os, line);
-        }
-
+        os.write(asciiraw(accumulator));
         os.flush();
 
         return 0;
@@ -618,16 +616,14 @@ public class SMTPWorker implements Runnable {
             responses.add("252 2.1.0 send some mail, I'll try my best");
         }
 
+        final var accumulator = new StringBuilder();
         for(final String line: responses)
         {
             logger.infof("S: %s", line);
+            accumulator.append(line).append("\r\n");
         }
 
-        for(final String line: responses)
-        {
-            writeLine(os, line);
-        }
-
+        os.write(asciiraw(accumulator));
         os.flush();
 
         return 0;
@@ -649,16 +645,14 @@ public class SMTPWorker implements Runnable {
             responses.add("252 2.1.0 Unable to verify mailbox for mailing list");
         }
 
+        final var accumulator = new StringBuilder();
         for(final String line: responses)
         {
             logger.infof("S: %s", line);
+            accumulator.append(line).append("\r\n");
         }
 
-        for(final String line: responses)
-        {
-            writeLine(os, line);
-        }
-       
+        os.write(asciiraw(accumulator));
         os.flush();
 
         return 0;
@@ -726,7 +720,9 @@ public class SMTPWorker implements Runnable {
 
         logger.infof("S: %s", response);
 
-        writeLine(os, response);
+        final byte[] output = utf8raw(response.toString()+"\r\n");
+
+        os.write(output);
         os.flush();
 
         return 0;
@@ -813,16 +809,15 @@ public class SMTPWorker implements Runnable {
             responses.add(String.format("250 2.1.0 <%s>: Recipient OK", recipient.getEmail()));
         }
 
+        final var accumulator = new StringBuilder();
         for(final String line: responses)
         {
             logger.infof("S: %s", line);
+            accumulator.append(line).append("\r\n");
         }
 
-        for(final String line: responses)
-        {
-            writeLine(os, line);
-        }
-
+        final byte[] output = utf8raw(accumulator);
+        os.write(output);
         os.flush();
 
         return 0;
@@ -1157,6 +1152,11 @@ public class SMTPWorker implements Runnable {
     private byte[] asciiraw(final CharSequence content)
     {
         return content.toString().getBytes(StandardCharsets.US_ASCII);
+    }
+
+    private byte[] utf8raw(final CharSequence content)
+    {
+        return content.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     private byte[] concatEndLine(final byte[]... sources)
