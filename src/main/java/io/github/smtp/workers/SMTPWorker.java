@@ -142,8 +142,15 @@ public class SMTPWorker implements Runnable {
 
         socket.setSoTimeout(30000);
 
-        is = socket.getInputStream();
-        os = socket.getOutputStream();
+        if(socket instanceof SSLSocket sslSocket)
+        {
+            is = new BufferedInputStream(sslSocket.getInputStream());
+            os = new BufferedOutputStream(sslSocket.getOutputStream());
+        } else 
+        {
+            is = socket.getInputStream();
+            os = socket.getOutputStream();
+        }
 
         startPresentation();
         interact();
