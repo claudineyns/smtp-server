@@ -104,7 +104,6 @@ public class RelayTest {
 
             request("RCPT TO: <bob@beta.net>\r\n", out);
             response(in);
-
         }
     }
 
