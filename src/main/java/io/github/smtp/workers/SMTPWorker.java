@@ -8,6 +8,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigInteger;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
@@ -15,9 +16,12 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -246,11 +250,11 @@ public class SMTPWorker implements Runnable {
             return authPlain(statement, raw);
         }
 
-        if (statement.toUpperCase().startsWith("MAIL FROM:")) {
+        if (statement.regionMatches(true, 0, "MAIL FROM:", 0, 10)) {
             return mailFrom(statement, raw);
         }
 
-        if (statement.toUpperCase().startsWith("RCPT TO:")) {
+        if (statement.regionMatches(true, 0, "RCPT TO:", 0, 8)) {
             return rcptTo(statement, raw);
         }
 
@@ -299,6 +303,8 @@ public class SMTPWorker implements Runnable {
         return 0;
     }
 
+    static final long MAX_MESSAGE_SIZE = 2 * 1024 * 1024;
+
     private byte ehlo(final String statement, final byte[] raw) throws IOException
     {
         this.heloHost = statement.substring(5);
@@ -306,7 +312,7 @@ public class SMTPWorker implements Runnable {
         final List<String> responses = new ArrayList<>();
 
         responses.add("250-" + this.hostname + " greets " + this.heloHost);
-        responses.add("250-HELP");
+        responses.add("250-SIZE " + MAX_MESSAGE_SIZE);
         responses.add("250-ENHANCEDSTATUSCODES");
         if(this.isSecure)
         {
@@ -316,6 +322,7 @@ public class SMTPWorker implements Runnable {
         {
             responses.add("250-STARTTLS");
         }
+        responses.add("250-HELP");
         responses.add("250 8BITMIME");
 
         for(final String line: responses)
@@ -659,6 +666,7 @@ public class SMTPWorker implements Runnable {
 
     private Boolean fromHost = null;
     private Mailbox sender = null;
+    private Map<String, Object> mailParams = new LinkedHashMap<>();
 
     private byte mailFrom(final String statement, final byte[] raw) throws IOException {
         if(this.heloHost == null) {
@@ -685,6 +693,8 @@ public class SMTPWorker implements Runnable {
         final String domain = email.substring(email.indexOf('@') + 1).toLowerCase();
         final Mailbox sender = new Mailbox(name, user, domain);
 
+        parseMailParams(statement);
+
         this.fromHost = Boolean.FALSE;
         this.whiteList
             .stream()
@@ -697,11 +707,21 @@ public class SMTPWorker implements Runnable {
         if (Boolean.TRUE.equals(fromHost) && !authenticated) {
             this.fromHost = null;
             response.append(SmtpError.AUTHENTICATION_REQUIRED);
-        } else {
+        } else {            
             this.recipients.clear();
             this.toHost = null;
-            this.sender = sender;
-            response.append(String.format("250 2.1.0 <%s>: Originator OK", this.sender.getEmail()));
+
+            final BigInteger messageSize = getMessageSize();
+            if(messageSize.compareTo(BigInteger.valueOf(MAX_MESSAGE_SIZE)) > 0)
+            {
+                this.mailParams.clear();
+                this.fromHost = null;
+                response.append(SmtpError.MESSAGE_TOO_BIG);
+            } else 
+            {
+                this.sender = sender;
+                response.append(String.format("250 2.1.0 <%s>: Originator OK", this.sender.getEmail()));
+            }
         }
 
         logger.infof("S: %s", response);
@@ -710,6 +730,41 @@ public class SMTPWorker implements Runnable {
         os.flush();
 
         return 0;
+    }
+
+    private void parseMailParams(final String statement)
+    {
+        int p = statement.indexOf('>');
+        if(p < 0)
+        {
+            return;
+        }
+
+        this.mailParams.clear();
+        final String[] tokens = statement.substring(p + 1).split(" ");
+        for(String token: tokens)
+        {
+            if(token.isBlank())
+            {
+                continue;
+            }
+
+            final String[] params = token.split("=");
+            final String key = params[0];
+            final Object value = params.length > 1 ? params[1] : Boolean.TRUE;
+
+            this.mailParams.put(key.toUpperCase(), value);
+            logger.tracef("S: (extension detected: %s = %s)", key, value);
+        }
+    }
+
+    private BigInteger getMessageSize()
+    {
+        return Optional
+            .ofNullable(this.mailParams.get("SIZE"))
+            .map(String::valueOf)
+            .map(BigInteger::new)
+            .orElseGet(()->BigInteger.valueOf(MAX_MESSAGE_SIZE));
     }
 
     private Boolean toHost = null;
@@ -849,6 +904,7 @@ public class SMTPWorker implements Runnable {
 
     private void resetState()
     {
+        this.mailParams.clear();
         this.authenticated = false;
         this.fromHost = null;
         this.toHost = null;
@@ -897,7 +953,6 @@ public class SMTPWorker implements Runnable {
         return 0;
     }
 
-    final long MAX_MESSAGE_SIZE = 2 * 1024 * 1024;
     private byte consumeData() throws IOException {
         final ByteArrayOutputStream data = new ByteArrayOutputStream();
 
@@ -908,11 +963,14 @@ public class SMTPWorker implements Runnable {
         int control4 = 0;
 
         int reader = -1;
+
+        boolean safeData = true;
+
         while ((reader = is.read()) != -1) {
-            if(data.size() > MAX_MESSAGE_SIZE)
+            if(safeData && data.size() > MAX_MESSAGE_SIZE)
             {
                 data.reset();
-                return messageSizeExceeded();
+                safeData = false;
             }
 
             control0 = control1;
@@ -928,7 +986,12 @@ public class SMTPWorker implements Runnable {
                 &&  control4 == '\n'
             )
             {
-                return dataReceived(data);
+                return safeData ? dataReceived(data) : messageSizeExceeded();
+            }
+
+            if(!safeData)
+            {
+                continue;
             }
 
             if(     control1 == '\r'
