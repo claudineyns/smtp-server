@@ -4,28 +4,18 @@ import java.util.Optional;
 
 import io.smallrye.config.ConfigMapping;
 
-@ConfigMapping(prefix = "application.smtp.ssl")
-public interface SslConfigs {
-
-    String hostname();
-
+@ConfigMapping(prefix = "application.server.ssl")
+public interface SslConfigs
+{
     Integer port();
-
-    KeyStore keystore();
-
-    TrustStore truststore();
 
     Optional<Integer> externalPort();
 
-    interface KeyStore {
-        String resource();
-        String format();
-        String storepass();
-    }
+    Keystore keystore();
 
-    interface TrustStore {
+    interface Keystore
+    {
         String resource();
-        String format();
         String storepass();
     }
 
