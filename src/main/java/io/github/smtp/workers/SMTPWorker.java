@@ -25,6 +25,7 @@ import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
 import io.github.smtp.protocol.SmtpError;
@@ -346,6 +347,23 @@ public class SMTPWorker implements Runnable {
 
         writeLine(os, message);
         os.flush();
+
+        final long time = ConfigProvider
+            .getConfig()
+            .getOptionalValue("debug.wait-before-tls-ms", Long.class)
+            .orElse(0L);
+
+        try
+        {
+            if(time > 0)
+            {
+                Thread.sleep(time);
+            }
+        } catch(InterruptedException failure)
+        {
+            logger.warn(failure.getMessage());
+            Thread.currentThread().interrupt();
+        }
 
         return ! this.isSecure ? startSecureChain() : 0;
     }
