@@ -313,6 +313,7 @@ public class SMTPWorker implements Runnable {
         responses.add("250-" + this.hostname + " greets " + this.heloHost);
         responses.add("250-SIZE " + MAX_MESSAGE_SIZE);
         responses.add("250-ENHANCEDSTATUSCODES");
+        responses.add("250-PIPELINING");
         if(this.isSecure)
         {
             responses.add("250-AUTH LOGIN PLAIN");
