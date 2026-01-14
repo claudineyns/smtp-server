@@ -76,7 +76,7 @@ public class MailTest {
     @Test
     public void verifyMailboxSuccess() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         try
         {
@@ -125,7 +125,7 @@ public class MailTest {
     @Test
     public void expandMailboxSuccess() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         try
         {
@@ -171,7 +171,7 @@ public class MailTest {
     @Test
     public void blacklistSuccess() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         try
         {
@@ -211,7 +211,7 @@ public class MailTest {
     @Test
     public void nullSenderSuccess() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         try
         {
@@ -251,7 +251,7 @@ public class MailTest {
     @Test
     public void invalidClientHostSuccess() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         try
         {
@@ -286,7 +286,7 @@ public class MailTest {
     @Test
     public void destinationMailboxSuccess() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         try
         {
@@ -327,7 +327,7 @@ public class MailTest {
     @Test
     public void sendDataIncompleteMailboxesSuccess() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         try
         {

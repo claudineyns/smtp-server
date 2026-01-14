@@ -90,7 +90,7 @@ public class SequenceTest {
     public void introductionMissingTest() throws Exception
     {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         try
         {
@@ -123,7 +123,7 @@ public class SequenceTest {
     public void mailFromMissingTest() throws Exception
     {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         try
         {
@@ -159,7 +159,7 @@ public class SequenceTest {
     public void recipientsMissingTest() throws Exception
     {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         try
         {

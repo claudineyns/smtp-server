@@ -29,7 +29,9 @@ import java.util.concurrent.Executors;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSessionContext;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 @ApplicationScoped
@@ -48,6 +50,8 @@ public class SMTPAgent {
 		logger.infof("application.server.hostname = %s", fetchServiceHost() );
 		logger.infof("application.server.port = %s", getPort() );
 		logger.infof("application.server.external-port = %s", getExternalPort() );
+		logger.infof("application.server.ssl.port = %s", getSslPort() );
+		logger.infof("application.server.ssl.external-port = %s", getSslExternalPort() );
 		logger.infof("application.content-folder = %s", fetchContentFolder() );
 
 		Executors.newSingleThreadExecutor().submit(() -> startServer());
@@ -70,12 +74,29 @@ public class SMTPAgent {
 
 	private void stopServer()
 	{
+		stopInsecure();
+		stopSecure();
+	}
+
+	private void stopInsecure()
+	{
 		try {
 			if(this.server != null && !this.server.isClosed()) {
 				this.server.close();
 			}
-		} catch (IOException e) {
-			logger.warnf(e.getMessage());
+		} catch (IOException failure) {
+			logger.warnf(failure.getMessage());
+		}
+	}
+
+	private void stopSecure()
+	{
+		try {
+			if(this.sslServer != null && !this.sslServer.isClosed()) {
+				this.sslServer.close();
+			}
+		} catch (IOException failure) {
+			logger.warnf(failure.getMessage());
 		}
 	}
 
@@ -104,7 +125,17 @@ public class SMTPAgent {
 
 	private Integer getPort()
 	{
-		return configs.server().port().orElse(DEFAULT_SMTP_PORT);
+		return configs.server().port();
+	}
+
+	private Integer getSslExternalPort()
+	{
+		return sslConfigs.externalPort().orElseGet(this::getSslPort);
+	}
+
+	private Integer getSslPort()
+	{
+		return sslConfigs.port();
 	}
 
 	private String fetchContentFolder()
@@ -116,7 +147,6 @@ public class SMTPAgent {
 
 	private String serviceHost;
 	private String serviceAddress;
-	private Integer servicePort;
 
 	private List<String> whitelist;
 
@@ -126,12 +156,12 @@ public class SMTPAgent {
 
 	private ServerSocket server;
 
+	private SSLServerSocket sslServer;
+
 	private SSLSocketFactory sslSocketFactory;
 
 	private void mountServers() throws Exception {
         this.serviceHost = fetchServiceHost();
-
-		this.servicePort = getPort();
 
 		this.whitelist = AppUtils.listOf
 		(
@@ -142,12 +172,12 @@ public class SMTPAgent {
 		this.contentFolder = fetchContentFolder();
 
 		final var address = InetAddress.getByName(serviceHost);
-		final var socketAddress = new InetSocketAddress(address, servicePort);
+		final var socketAddress = new InetSocketAddress(address, getPort());
+
+		this.serviceAddress = address.getHostAddress();
 
 		this.server = new ServerSocket();
 		this.server.bind(socketAddress);
-		
-		this.serviceAddress = server.getInetAddress().getHostAddress();
 
 		final var executorService = Executors.newFixedThreadPool(2);
 
@@ -190,30 +220,33 @@ public class SMTPAgent {
 
 		this.sslSocketFactory = sslContext.getSocketFactory();
 
-        // sslServerSocket = (SSLServerSocket) sslSocketFactory.createServerSocket(sslConfig.port());
+        this.sslServer = (SSLServerSocket) sslContext
+			.getServerSocketFactory()
+			.createServerSocket(getSslPort());
 
-        // final SSLParameters params = sslServerSocket.getSSLParameters();
+        final var params = this.sslServer.getSSLParameters();
 
-        // params.setApplicationProtocols(new String[] {"http/1.1"});
-        // params.setProtocols(new String[] {"TLSv1.2", "TLSv1.3"});
-        // //params.setProtocols(new String[] {"TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"});
-        // params.setUseCipherSuitesOrder(true);
-        // params.setWantClientAuth(true);
+        params.setApplicationProtocols(new String[] {"http/1.1"});
+        params.setProtocols(new String[] {"TLSv1.2", "TLSv1.3"});
+        params.setUseCipherSuitesOrder(true);
 
-        // sslServerSocket.setSSLParameters(params);
+        this.sslServer.setSSLParameters(params);
 
 		executorService.submit(() -> this.startInsecureServer());
+
+		executorService.submit(() -> this.startSecureServer());
 	}
 
 	private void startInsecureServer()
 	{
-		logger.infof(">>> Server started on host %s and port %s <<<", serviceHost, servicePort);
+		logger.infof(">>> Server started on port %s <<<", getPort());
 
 		while (true) {
 			Socket client = null;
 			try {
 				client = server.accept();
-			} catch (IOException e) {
+			} catch (IOException failure) {
+				logger.warn(failure.getMessage());
 				break;
 			}
 
@@ -229,6 +262,33 @@ public class SMTPAgent {
 		}
 
 		logger.trace("--- Server not accepting new connections");
+	}
+
+	private void startSecureServer()
+	{
+		logger.infof(">>> TLS Server started on port %s <<<", getSslPort());
+
+		while (true) {
+			SSLSocket client = null;
+			try {
+				client = (SSLSocket) sslServer.accept();
+			} catch (IOException failure) {
+				logger.warn(failure.getMessage());
+				break;
+			}
+
+			logger.info("\n");
+			logger.trace("--- TLS Server got new connection ---");
+
+			this.threads.submit(
+				new SMTPWorker(client, this.serviceAddress, UUID.randomUUID(), whitelist)
+					.setHostname(this.serviceHost)
+					.setContentFolder(this.contentFolder)
+					.setSslSocketFactory(this.sslSocketFactory)
+			);
+		}
+
+		logger.trace("--- TLS Server not accepting new connections");
 	}
 
 }

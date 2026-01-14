@@ -48,6 +48,8 @@ public class SMTPWorker implements Runnable {
     private final String timestamp;
 
     private final List<String> whiteList = new LinkedList<>();
+
+    private boolean isSecure = false;
     
     public SMTPWorker(
         final Socket socket,
@@ -69,6 +71,8 @@ public class SMTPWorker implements Runnable {
 
         this.clientAddress = remoteInetAddress.getHostAddress();
         this.clientHostname = remoteInetAddress.getCanonicalHostName();
+
+        this.isSecure = socket instanceof SSLSocket;
     }
 
     private String hostname;
@@ -287,8 +291,6 @@ public class SMTPWorker implements Runnable {
 
         return 0;
     }
-
-    private boolean isSecure = false;
 
     private byte ehlo(final String statement, final byte[] raw) throws IOException
     {

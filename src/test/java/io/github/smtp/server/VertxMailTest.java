@@ -54,7 +54,7 @@ public class VertxMailTest {
     @Test
     public void sendMailSuccess() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         final String username = "admin@example.com";
         final String password = "myp@77";
