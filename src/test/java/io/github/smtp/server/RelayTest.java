@@ -74,7 +74,7 @@ public class RelayTest {
     public void relaySuccess() throws Exception
     {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port().orElse(25);
+        final Integer port = configs.server().port();
 
         try
         {

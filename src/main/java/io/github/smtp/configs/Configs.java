@@ -15,7 +15,7 @@ public interface Configs
     {
         Optional<String> hostname();
 
-        Optional<Integer> port();
+        Integer port();
 
         Optional<Integer> externalPort();
 
