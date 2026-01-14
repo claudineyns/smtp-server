@@ -15,7 +15,8 @@ public enum SmtpError {
     UNAVAILABLE("421", "4.0.0", "Service not available, closing transmission channel"),
     INVALID_COMMAND("500", "5.5.1", "Invalid command"),
     INTRODUCTION_MISSING("503", "5.5.1", "Please, introduce yourself"),
-    SECURITY_POLICY("550", "5.7.1", "Security policy")
+    SECURITY_POLICY("550", "5.7.1", "Security policy"),
+    MESSAGE_TOO_BIG("552", "5.3.4", "Message size exceeds fixed limit"),
     ;
 
     private String code;

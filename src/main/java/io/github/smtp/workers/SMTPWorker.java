@@ -17,6 +17,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
 import org.jboss.logging.Logger;
 
 import io.github.smtp.protocol.SmtpError;
@@ -31,13 +33,14 @@ public class SMTPWorker implements Runnable {
     private InputStream is;
     private OutputStream os;
 
-    private String clientHost;
+    private String clientHostname;
     private String clientAddress;
 
+    @SuppressWarnings("unused")
     private String serverAddress;
-    
+
     private final String timestamp;
-    
+
     private final List<String> whiteList = new LinkedList<>();
     
     public SMTPWorker(
@@ -59,7 +62,7 @@ public class SMTPWorker implements Runnable {
         final var remoteInetAddress = socket.getInetAddress();
 
         this.clientAddress = remoteInetAddress.getHostAddress();
-        this.clientHost = remoteInetAddress.getCanonicalHostName();
+        this.clientHostname = remoteInetAddress.getCanonicalHostName();
     }
 
     private String hostname;
@@ -112,12 +115,12 @@ public class SMTPWorker implements Runnable {
     }
 
     private void process() throws IOException {
-        if(this.clientAddress.equals(this.clientHost))
+        if(this.clientAddress.equals(this.clientHostname))
         {
             logger.debugf("Remote peer: %s", this.clientAddress);
         } else
         {
-            logger.debugf("Remote peer: %s [%s]", this.clientAddress, this.clientHost);
+            logger.debugf("Remote peer: %s [%s]", this.clientAddress, this.clientHostname);
         }
 
         socket.setSoTimeout(30000);
@@ -405,7 +408,6 @@ public class SMTPWorker implements Runnable {
         int[] control = { -1, -1 };
         int reader = -1;
         while ((reader = is.read()) != -1) {
-
             control[0] = control[1];
             control[1] = reader;
 
@@ -726,6 +728,7 @@ public class SMTPWorker implements Runnable {
         return 0;
     }
 
+    @SuppressWarnings("unused")
     private byte securityPolicy() throws IOException {
         logger.infof("S: %s", SmtpError.SECURITY_POLICY);
 
@@ -781,111 +784,141 @@ public class SMTPWorker implements Runnable {
     }
 
     final long MAX_MESSAGE_SIZE = 2 * 1024 * 1024;
-    private void consumeData() throws IOException {
+    private byte consumeData() throws IOException {
         final ByteArrayOutputStream data = new ByteArrayOutputStream();
 
-        final int[] control = { -1, -1, -1, -1, -1 };
+        int control0 = 0;
+        int control1 = 0;
+        int control2 = 0;
+        int control3 = 0;
+        int control4 = 0;
+
         int reader = -1;
         while ((reader = is.read()) != -1) {
-            control[0] = control[1];
-            control[1] = control[2];
-            control[2] = control[3];
-            control[3] = control[4];
-            control[4] = reader;
-
-            if(     control[0] == '\r'
-                &&  control[1] == '\n'
-                &&  control[2] == '.'
-                &&  control[3] == '\r'
-                &&  control[4] == '\n'
-            )
+            if(data.size() > MAX_MESSAGE_SIZE)
             {
-                dataReceived(data);
-                break;
+                data.reset();
+                return messageSizeExceeded();
             }
 
-            if(     control[1] == '\r'
-                &&  control[2] == '\n'
-                &&  control[3] == '.'
-                &&  control[4] == '\r'
+            control0 = control1;
+            control1 = control2;
+            control2 = control3;
+            control3 = control4;
+            control4 = reader;
+
+            if(     control0 == '\r'
+                &&  control1 == '\n'
+                &&  control2 == '.'
+                &&  control3 == '\r'
+                &&  control4 == '\n'
             )
             {
-                continue;
+                return dataReceived(data);
             }
 
-            if(     control[2] == '\r'
-                &&  control[3] == '\n'
-                &&  control[4] == '.'
+            if(     control1 == '\r'
+                &&  control2 == '\n'
+                &&  control3 == '.'
+                &&  control4 == '\r'
             )
             {
                 continue;
             }
 
-            if(     control[3] == '\r'
-                &&  control[4] == '\n'
+            if(     control2 == '\r'
+                &&  control3 == '\n'
+                &&  control4 == '.'
             )
             {
                 continue;
             }
 
-            if(control[4] == '\r')
+            if(     control3 == '\r'
+                &&  control4 == '\n'
+            )
             {
-                if(control[3] == '\r')
+                continue;
+            }
+
+            if(control4 == '\r')
+            {
+                if(control3 == '\r')
                 {
-                    data.write(control[3]);
-                    control[3] = 0;
+                    data.write(control3);
+                    control3 = 0;
+                }
+
+                if(control2 == '\r' && control3 == '\n')
+                {
+                    data.write(control2);
+                    control2 = 0;
+
+                    data.write(control3);
+                    control3 = 0;
                 }
 
                 continue;
             }
 
-            if(     control[2] == '\r'
-                &&  control[3] == '\n'
+            if(     control2 == '\r'
+                &&  control3 == '\n'
             )
             {
-                data.write(control[2]);
-                control[2] = 0;
+                data.write(control2);
+                control2 = 0;
 
-                data.write(control[3]);
-                control[3] = 0;
+                data.write(control3);
+                control3 = 0;
             }
 
-            if(     control[1] == '\r'
-                &&  control[2] == '\n'
-                &&  control[3] == '.'
+            if(     control1 == '\r'
+                &&  control2 == '\n'
+                &&  control3 == '.'
             )
             {
-                data.write(control[1]);
-                control[1] = 0;
+                data.write(control1);
+                control1 = 0;
 
-                data.write(control[2]);
-                control[2] = 0;
+                data.write(control2);
+                control2 = 0;
 
-                control[3] = 0;
+                control3 = 0;
             }
 
-            if(     control[0] == '\r'
-                &&  control[1] == '\n'
-                &&  control[2] == '.'
-                &&  control[3] == '\r'
+            if(     control0 == '\r'
+                &&  control1 == '\n'
+                &&  control2 == '.'
+                &&  control3 == '\r'
             )
             {
-                data.write(control[0]);
-                control[0] = 0;
+                data.write(control0);
+                control0 = 0;
 
-                data.write(control[1]);
-                control[1] = 0;
+                data.write(control1);
+                control1 = 0;
 
-                control[2] = 0;
+                control2 = 0;
 
-                data.write(control[3]);
-                control[3] = 0;
+                data.write(control3);
+                control3 = 0;
             }
 
-            data.write(control[4]);
-            control[4] = 0;
+            data.write(control4);
+            control4 = 0;
         }
 
+        return 1;
+    }
+
+    private byte messageSizeExceeded() throws IOException
+    {
+        logger.infof("S: %s", SmtpError.MESSAGE_TOO_BIG);
+
+        writeLine(os, SmtpError.MESSAGE_TOO_BIG);
+        os.flush();
+
+        return 1;
     }
 
     private byte dataReceived(final ByteArrayOutputStream rawData) throws IOException {
@@ -901,18 +934,33 @@ public class SMTPWorker implements Runnable {
 
         final File file = new File(this.contentFolder, "mail-" + hash + ".out");
 
+        final String receivedHeader = "Received: ";
+
+        final StringBuilder received = new StringBuilder();
+        received.append(receivedHeader);
+        received.append("from: ");
+        received.append(this.heloHost);
+        received.append(" (");
+
+        if( ! this.clientAddress.equals(this.clientHostname))
+        {
+            received.append(this.clientHostname).append(' ');
+        }
+
+        received.append('[').append(this.clientAddress).append(']');
+        received.append(')');
+        received.append("\r\n").append(" ".repeat(receivedHeader.length()));
+        received.append("by ").append(this.hostname).append(" (SMTP)");
+        received.append(" with SMTP id ").append(ThreadLocalRandom.current().nextInt(100000, 1000000));
+        received.append("\r\n").append(" ".repeat(receivedHeader.length()));
+        received.append("for <").append(this.sender.getEmail()).append(">;");
+        received.append("\r\n").append(" ".repeat(receivedHeader.length()));
+        received.append(this.timestamp).append("\r\n");
+
+        final byte[] receivedFrom = asciiraw(received);
+
         try (OutputStream outData = new FileOutputStream(file)) {
-            final byte[] receivedFrom = String
-                    .format("Received: from %s (%s)%s", this.clientHost, this.clientAddress, "\r\n")
-                    .getBytes(StandardCharsets.US_ASCII);
-
             outData.write(receivedFrom);
-
-            final byte[] deliveryDate = String
-                    .format("X-Delivery-Date: %s%s", this.timestamp, "\r\n")
-                    .getBytes(StandardCharsets.US_ASCII);
-
-            outData.write(deliveryDate);
 
             rawData.writeTo(outData);
 

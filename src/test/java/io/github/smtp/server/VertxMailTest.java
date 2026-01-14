@@ -62,7 +62,7 @@ public class VertxMailTest {
         final StringBuilder text = new StringBuilder("");
         text.append("Lorem ipsum dolor sit amet, consectetur adipiscing elit.\r\n");
         text.append("Phasellus gravida est nec ante lobortis, id pellentesque neque maximus.\r\n");
-        text.append(".Phasellus scelerisque a nunc non ultrices. Duis posuere mi eu ullamcorper posuere.\r\n");
+        text.append(".Qhasellus scelerisque a nunc non ultrices. Duis posuere mi eu ullamcorper posuere.\r\n");
         text.append("..Etiam scelerisque nec sem sit amet laoreet. Cras tincidunt eu nibh ullamcorper condimentum.\r\n");
         text.append("...Curabitur sit amet mollis ex, vulputate fermentum odio.\r\n");
         text.append("\r\n");
@@ -91,7 +91,7 @@ public class VertxMailTest {
 
         final MailAttachment attachment = MailAttachment.create()
                 .setData(Buffer.buffer(raw))
-                .setName("rfc6152.txt.pdf")
+                .setName("rfc6152.pdf")
                 .setContentType("application/pdf")
                 .setDisposition("attachment");
 
@@ -110,7 +110,6 @@ public class VertxMailTest {
         {
             logger.warn(failure.getMessage());
         }
-
     }
 
 }
