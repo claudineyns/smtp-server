@@ -25,7 +25,6 @@ import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
-import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
 import io.github.smtp.protocol.SmtpError;
@@ -348,23 +347,6 @@ public class SMTPWorker implements Runnable {
         writeLine(os, message);
         os.flush();
 
-        final long time = ConfigProvider
-            .getConfig()
-            .getOptionalValue("debug.wait-before-tls-ms", Long.class)
-            .orElse(0L);
-
-        try
-        {
-            if(time > 0)
-            {
-                Thread.sleep(time);
-            }
-        } catch(InterruptedException failure)
-        {
-            logger.warn(failure.getMessage());
-            Thread.currentThread().interrupt();
-        }
-
         return ! this.isSecure ? startSecureChain() : 0;
     }
 
@@ -438,9 +420,12 @@ public class SMTPWorker implements Runnable {
 
         logger.info("S: Awaiting for " + usernameLabel);
 
-        os.write(asciiraw("334 "));
-        os.write(Base64.getEncoder().encode(asciiraw(usernameLabel)));
-        os.write(ENDLINE);
+        final byte[] data = concatEndLine(
+            asciiraw("334 "),
+            Base64.getEncoder().encode(asciiraw(usernameLabel))
+        );
+
+        os.write(data);
         os.flush();
 
         String username = getContent();
@@ -481,9 +466,12 @@ public class SMTPWorker implements Runnable {
         final String passwordLabel = "Password:"; // base64: UGFzc3dvcmQ6
         logger.info("S: Awaiting for " + passwordLabel);
 
-        os.write(asciiraw("334 "));
-        os.write(Base64.getEncoder().encode(asciiraw(passwordLabel)));
-        os.write(ENDLINE);
+        final byte[] data = concatEndLine(
+            asciiraw("334 "),
+            Base64.getEncoder().encode(asciiraw(passwordLabel))
+        );
+
+        os.write(data);
         os.flush();
 
         final String password = getContent();
@@ -1087,11 +1075,8 @@ public class SMTPWorker implements Runnable {
 
         try (OutputStream outData = new FileOutputStream(file)) {
             outData.write(receivedFrom);
-
             rawData.writeTo(outData);
-
             outData.flush();
-
         } catch (IOException e) { /***/ }
 
         logger.infof("--- Data hash: %s ---", hash);
@@ -1101,13 +1086,38 @@ public class SMTPWorker implements Runnable {
 
     private void writeLine(final OutputStream out, final Object content) throws IOException
     {
-        out.write(asciiraw(content.toString()));
-        out.write(ENDLINE);
+        final byte[] raw = concatEndLine(asciiraw(content.toString()));
+
+        out.write(raw);
     }
 
     private byte[] asciiraw(final CharSequence content)
     {
         return content.toString().getBytes(StandardCharsets.US_ASCII);
+    }
+
+    private byte[] concatEndLine(final byte[]... sources)
+    {
+        int size = 0;
+        for(byte[] q: sources)
+        {
+            size += q.length;
+        }
+
+        final byte[] raw = new byte[size + 2];
+        int c = 0;
+        for(byte[] q: sources)
+        {
+            for(byte b: q)
+            {
+                raw[c++] = b;
+            }
+        }
+
+        raw[c++] = '\r';
+        raw[c++] = '\n';
+
+        return raw;
     }
 
     static class Mailbox {
@@ -1157,6 +1167,4 @@ public class SMTPWorker implements Runnable {
             return getEmail().equals(email);
         }
     }
-
-    static final byte[] ENDLINE = "\r\n".getBytes(StandardCharsets.US_ASCII);
 }
