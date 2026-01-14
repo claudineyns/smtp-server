@@ -29,13 +29,12 @@ jobs:
         port: 50022
         envs: MY_TOKEN,MY_USER,BRANCH,REPO_URL,FOLDER,SOURCE
         script: |
-          ### && mvn install -Dnative -f $SOURCE/pom.xml -s $SOURCE/settings.xml
-          ### && cp $SOURCE/target/certauth*-runner $FOLDER
           AUTH_URL="https://$MY_USER:$MY_TOKEN@$REPO_URL"
           rm -fr $SOURCE \
            && mkdir -p $SOURCE \
            && git clone -b $BRANCH $AUTH_URL $SOURCE \
-           && mvn package -f $SOURCE/pom.xml -s $SOURCE/settings.xml \
+           && mvn install -Dnative -f $SOURCE/pom.xml -s $SOURCE/settings.xml \
            && cp $SOURCE/target/smtp*-runner.jar $FOLDER \
+           && cp $SOURCE/target/certauth*-runner $FOLDER \
            && rm -fr $SOURCE \
            && echo 'Build completed'
