@@ -79,8 +79,9 @@ public class VertxMailTest {
                 .setHostname(hostname)
                 .setPort(port)
                 .setLogin(LoginOption.REQUIRED)
-                //.setStarttls(StartTLSOptions.REQUIRED)
-                .setStarttls(StartTLSOptions.DISABLED)
+                .setStarttls(StartTLSOptions.REQUIRED)
+                //.setStarttls(StartTLSOptions.DISABLED)
+                .setTrustAll(true)
                 .setUsername(username)
                 .setPassword(password);
 

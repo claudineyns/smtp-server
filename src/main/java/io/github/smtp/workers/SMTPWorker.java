@@ -1,5 +1,7 @@
 package io.github.smtp.workers;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -19,6 +21,10 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+
 import org.jboss.logging.Logger;
 
 import io.github.smtp.protocol.SmtpError;
@@ -29,7 +35,7 @@ public class SMTPWorker implements Runnable {
     @SuppressWarnings("unused")
     private final UUID sessionId;
 
-    private final Socket socket;
+    private Socket socket;
     private InputStream is;
     private OutputStream os;
 
@@ -76,6 +82,13 @@ public class SMTPWorker implements Runnable {
     public SMTPWorker setContentFolder(final String contentFolder)
     {
         this.contentFolder = contentFolder;
+        return this;
+    }
+
+    private SSLSocketFactory sslSocketFactory;
+    public SMTPWorker setSslSocketFactory(SSLSocketFactory sslSocketFactory)
+    {
+        this.sslSocketFactory = sslSocketFactory;
         return this;
     }
 
@@ -275,19 +288,26 @@ public class SMTPWorker implements Runnable {
         return 0;
     }
 
-    private byte ehlo(final String statement, final byte[] raw) throws IOException {
+    private boolean isSecure = false;
+
+    private byte ehlo(final String statement, final byte[] raw) throws IOException
+    {
         this.heloHost = statement.substring(5);
 
         final List<String> responses = new ArrayList<>();
 
         responses.add("250-" + this.hostname + " greets " + this.heloHost);
         responses.add("250-HELP");
-        responses.add("250-AUTH LOGIN PLAIN");
-        responses.add("250-AUTH=LOGIN PLAIN");
         responses.add("250-ENHANCEDSTATUSCODES");
+        if(this.isSecure)
+        {
+            responses.add("250-AUTH LOGIN PLAIN");
+            responses.add("250-AUTH=LOGIN PLAIN");
+        } else
+        {
+            responses.add("250-STARTTLS");
+        }
         responses.add("250 8BITMIME");
-        //responses.add("250 BINARYMIME");
-        // responses.add("250 CHUNKING");
 
         for(final String line: responses)
         {
@@ -306,12 +326,50 @@ public class SMTPWorker implements Runnable {
 
     // https://docs.oracle.com/cd/E54932_01/doc.705/e54936/cssg_create_ssl_cert.htm#CSVSG180
 
-    private byte startTls() throws IOException {
-        // final String response = ""220 Ready to start TLS";
-        logger.tracef("S: %s", SmtpError.TLS_NOT_AVAILABLE);
+    private byte startTls() throws IOException
+    {
+        final String message = this.isSecure 
+            ? SmtpError.TLS_ALREADY_ACTIVE.toString()
+            : "220 2.0.0 Ready to start TLS";
 
-        writeLine(os, SmtpError.TLS_NOT_AVAILABLE);
+        // final String response = ""220 Ready to start TLS";
+        logger.infof("S: %s", message);
+
+        writeLine(os, message);
         os.flush();
+
+        return ! this.isSecure ? startSecureChain() : 0;
+    }
+
+    private byte startSecureChain() throws IOException
+    {
+        final SSLSocket sslSocket = (SSLSocket) sslSocketFactory
+            .createSocket(
+                this.socket, 
+                this.socket.getInetAddress().getHostAddress(),
+                this.socket.getPort(),
+                true
+            );
+
+        final SSLParameters params = sslSocket.getSSLParameters();
+        params.setUseCipherSuitesOrder(true);
+
+        sslSocket.setEnabledProtocols(new String[] { "TLSv1.2", "TLSv1.3" });
+        sslSocket.setSSLParameters(params);
+
+        sslSocket.setUseClientMode(false);
+
+        sslSocket.startHandshake();
+
+        this.socket = sslSocket;
+        this.is = new BufferedInputStream(sslSocket.getInputStream());
+        this.os = new BufferedOutputStream(sslSocket.getOutputStream());
+
+        this.isSecure = true;
+
+        resetState();
+
+        logger.debug(">>> Secure channel ON <<<");
 
         return 0;
     }
@@ -323,6 +381,16 @@ public class SMTPWorker implements Runnable {
     static final String LOCAL_USERNAME = "admin@example.com";
     static final String LOCAL_PASSWORD = "myp@77";
 
+    private byte notSecure() throws IOException
+    {
+        logger.infof("S: %s", SmtpError.NEED_STARTTLS);
+
+        writeLine(os, SmtpError.NEED_STARTTLS);
+        os.flush();
+
+        return 1;
+    }
+
     /*
      * SMTP Service Extension for Authentication
      * https://datatracker.ietf.org/doc/html/rfc4954#section-6
@@ -332,7 +400,13 @@ public class SMTPWorker implements Runnable {
      * SHOULD use the enhanced codes suggested here.
      */
 
-    private byte authLogin() throws IOException {
+    private byte authLogin() throws IOException
+    {
+        if( ! this.isSecure )
+        {
+            return notSecure();
+        }
+
         final String usernameLabel = "Username:"; // base64: VXNlcm5hbWU6
 
         logger.info("S: Awaiting for " + usernameLabel);
@@ -347,12 +421,20 @@ public class SMTPWorker implements Runnable {
         return validateAuthLoginCredential(username);
     }
 
-    private byte authLogin(String statement, byte[] raw) throws IOException {
-        if (username.isBlank()) {
+    private byte authLogin(String statement, byte[] raw) throws IOException
+    {
+        if( ! this.isSecure )
+        {
+            return notSecure();
+        }
+
+        if (username.isBlank())
+        {
             return authLogin();
         }
 
-        if (username.isBlank()) {
+        if (username.isBlank())
+        {
             logger.infof("S: %s", SmtpError.INVALID_CREDENTIALS);
 
             writeLine(os, SmtpError.INVALID_CREDENTIALS);
@@ -364,7 +446,8 @@ public class SMTPWorker implements Runnable {
         return validateAuthLoginCredential(username);
     }
 
-    private byte validateAuthLoginCredential(String username) throws IOException {
+    private byte validateAuthLoginCredential(String username) throws IOException
+    {
         this.username = new String(Base64.getDecoder().decode(username), StandardCharsets.US_ASCII);
         logger.info("C: Username: " + this.username);
 
@@ -425,10 +508,17 @@ public class SMTPWorker implements Runnable {
         return new String(data.toByteArray(), StandardCharsets.US_ASCII);
     }
 
-    private byte authPlain(String statement, byte[] raw) throws IOException {
+    private byte authPlain(String statement, byte[] raw) throws IOException
+    {
+        if( ! this.isSecure )
+        {
+            return notSecure();
+        }
+
         final String credential = statement.substring(11);
 
-        if (credential.isEmpty()) {
+        if (credential.isEmpty())
+        {
             authPlainTransition();
             return 0;
         }
@@ -436,7 +526,8 @@ public class SMTPWorker implements Runnable {
         return authPlainValidation(credential);
     }
 
-    private byte authPlainTransition() throws IOException {
+    private byte authPlainTransition() throws IOException
+    {
         final String response = "334 Go ahead";
 
         writeLine(os, response);
@@ -446,7 +537,8 @@ public class SMTPWorker implements Runnable {
         return authPlainValidation(credential);
     }
 
-    private byte authPlainValidation(String credential) throws IOException {
+    private byte authPlainValidation(String credential) throws IOException
+    {
         final StringBuilder response = new StringBuilder();
 
         if (credential.trim().isEmpty()) {
@@ -470,7 +562,8 @@ public class SMTPWorker implements Runnable {
         return 0;
     }
 
-    private byte verifyBadSintax() throws IOException {
+    private byte verifyBadSintax() throws IOException
+    {
         logger.infof("S: %s", SmtpError.MAILBOX_MISSING);
 
         writeLine(os, SmtpError.MAILBOX_MISSING);
@@ -587,6 +680,7 @@ public class SMTPWorker implements Runnable {
         final StringBuilder response = new StringBuilder();
 
         if (Boolean.TRUE.equals(fromHost) && !authenticated) {
+            this.fromHost = null;
             response.append(SmtpError.AUTHENTICATION_REQUIRED);
         } else {
             this.recipients.clear();
@@ -738,11 +832,16 @@ public class SMTPWorker implements Runnable {
         return 0;
     }
 
-    private byte rset() throws IOException {
+    private void resetState()
+    {
         this.authenticated = false;
         this.fromHost = null;
         this.toHost = null;
         this.recipients.clear();
+    }
+
+    private byte rset() throws IOException {
+        resetState();
 
         final String response = "250 2.0.0 OK";
 

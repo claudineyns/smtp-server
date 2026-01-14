@@ -17,6 +17,8 @@ public enum SmtpError {
     INTRODUCTION_MISSING("503", "5.5.1", "Please, introduce yourself"),
     SECURITY_POLICY("550", "5.7.1", "Security policy"),
     MESSAGE_TOO_BIG("552", "5.3.4", "Message size exceeds fixed limit"),
+    NEED_STARTTLS("530", "5.7.0", "Must issue a STARTTLS command first"),
+    TLS_ALREADY_ACTIVE("503", "5.5.1", "TLS already active")
     ;
 
     private String code;

@@ -141,10 +141,13 @@ public class DataTest {
             response(in);
 
             request(out, "DATA\r\n");
-            response(in);
+            final String checkData = response(in);
 
-            out.write(raw);
-            out.flush();
+            if(checkData.startsWith("2"))
+            {
+                out.write(raw);
+                out.flush();
+            }
 
             response(in);
         }
