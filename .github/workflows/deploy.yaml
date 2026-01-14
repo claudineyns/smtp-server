@@ -35,6 +35,6 @@ jobs:
            && git clone -b $BRANCH $AUTH_URL $SOURCE \
            && mvn install -Dnative -f $SOURCE/pom.xml -s $SOURCE/settings.xml \
            && cp $SOURCE/target/smtp*-runner.jar $FOLDER \
-           && cp $SOURCE/target/certauth*-runner $FOLDER \
+           && cp $SOURCE/target/smtp*-runner $FOLDER \
            && rm -fr $SOURCE \
            && echo 'Build completed'
