@@ -1,12 +1,9 @@
 package io.github.smtp.server;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,7 +16,7 @@ import io.vertx.mutiny.core.Vertx;
 import jakarta.inject.Inject;
 
 @QuarkusTest
-public class MailTest {
+public class MailTest extends BaseTest {
     @Inject
     Configs configs;
 
@@ -44,34 +41,18 @@ public class MailTest {
         server.stop();
     }
 
-    static final Charset ASCII = StandardCharsets.US_ASCII;
-
-    String content(final InputStream in) {
-        final StringBuilder data = new StringBuilder("");
-
-        int reader = -1;
-        try {
-            while((reader = in.read()) != -1) {
-                data.append((char)reader);
-            }
-        } catch(IOException e) {}
-
-        return data.toString();
-    }
-
     void request(final String request, final OutputStream out) throws Exception {
         out.write(request.getBytes(ASCII));
         out.flush();
-        Thread.sleep(250);
     }
 
     String response(final InputStream in) throws Exception {
         return content(in);
     }
 
-    static final int read_timeout = 250;
+    static final int startup_timeout = 250;
     static final int connect_timeout = 500;
-    static final int startup_timeout = 1000;
+    static final int read_timeout = 250;
 
     @Test
     public void verifyMailboxSuccess() throws Exception {
@@ -90,7 +71,6 @@ public class MailTest {
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
-
             socket.setSoTimeout(read_timeout);
             socket.connect(socketAddress, connect_timeout);
 
@@ -139,7 +119,6 @@ public class MailTest {
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
-
             socket.setSoTimeout(read_timeout);
             socket.connect(socketAddress, connect_timeout);
 
@@ -185,7 +164,6 @@ public class MailTest {
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
-
             socket.setSoTimeout(read_timeout);
             socket.connect(socketAddress, connect_timeout);
 
@@ -225,7 +203,6 @@ public class MailTest {
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
-
             socket.setSoTimeout(read_timeout);
             socket.connect(socketAddress, connect_timeout);
 
@@ -264,8 +241,7 @@ public class MailTest {
 
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
-        try (final Socket socket = new Socket()) {
-
+        try (final Socket socket = new Socket()){
             socket.setSoTimeout(read_timeout);
             socket.connect(socketAddress, connect_timeout);
 
@@ -279,7 +255,6 @@ public class MailTest {
 
             request("QUIT\r\n", out);
             response(in);
-
         }
     }
 
@@ -300,7 +275,6 @@ public class MailTest {
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
-
             socket.setSoTimeout(read_timeout);
             socket.connect(socketAddress, connect_timeout);
 
@@ -320,7 +294,6 @@ public class MailTest {
 
             request("QUIT\r\n", out);
             response(in);
-
         }
     }
 
@@ -341,7 +314,6 @@ public class MailTest {
         final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
 
         try (final Socket socket = new Socket()) {
-
             socket.setSoTimeout(read_timeout);
             socket.connect(socketAddress, connect_timeout);
 
@@ -376,7 +348,6 @@ public class MailTest {
 
             request("QUIT\r\n", out);
             response(in);
-
         }
     }
 

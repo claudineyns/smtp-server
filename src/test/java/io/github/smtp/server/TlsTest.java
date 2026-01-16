@@ -1,14 +1,10 @@
 package io.github.smtp.server;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
@@ -28,13 +24,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.github.smtp.configs.Configs;
+import io.github.smtp.configs.SubmissionConfigs;
 import io.github.smtp.protocol.SmtpError;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 
 @QuarkusTest
-public class TlsTest {
-    static final Charset ASCII = StandardCharsets.US_ASCII;
+public class TlsTest extends BaseTest {
 
     static final int read_timeout = 300;
     static final int connect_timeout = 500;
@@ -42,6 +38,9 @@ public class TlsTest {
 
     @Inject
     Configs configs;
+
+    @Inject
+    SubmissionConfigs submissionConfigs;
 
     @Inject
     SMTPAgent server;
@@ -61,34 +60,6 @@ public class TlsTest {
         server.stop();
     }
 
-    String content(final InputStream in) {
-        final ByteArrayOutputStream data = new ByteArrayOutputStream();
-
-        int byte0 = 0;
-        int byte1 = 0;
-        int reader = -1;
-        try {
-            while((reader = in.read()) != -1) {
-                byte0 = byte1;
-                byte1 = reader;
-                data.write(reader);
-            }
-        } catch(SocketTimeoutException failure) {
-            // esperado
-        } catch(IOException failure) {
-            throw new IllegalStateException(failure.getMessage());
-        }
-
-        final byte[] raw = data.toByteArray();
-
-        if(byte0 == '\r' && byte1 == '\n')
-        {
-            return new String(raw, 0, raw.length - 2, ASCII);
-        }
-
-        return new String(raw, ASCII);
-    }
-
     void request(final String request, final OutputStream out) throws Exception {
         out.write(request.getBytes(ASCII));
         out.flush();
@@ -102,7 +73,7 @@ public class TlsTest {
     public void relaySuccess() throws Exception
     {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port();
+        final Integer port = submissionConfigs.port();
 
         try
         {
@@ -152,7 +123,8 @@ public class TlsTest {
             response(in);
 
             request("STARTTLS\r\n", out);
-            response(in);
+            result = response(in);
+            Assertions.assertEquals("220 2.0.0 Ready to start TLS", result, "Test#0");
 
             final var sslSocket = upgrade(socket);
 

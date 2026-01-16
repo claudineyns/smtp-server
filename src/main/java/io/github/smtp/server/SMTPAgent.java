@@ -16,6 +16,7 @@ import org.jboss.logging.Logger;
 
 import io.github.smtp.configs.Configs;
 import io.github.smtp.configs.SslConfigs;
+import io.github.smtp.configs.SubmissionConfigs;
 import io.github.smtp.configs.UtilConfigs;
 import io.github.smtp.utils.AppUtils;
 import io.github.smtp.workers.SMTPWorker;
@@ -45,14 +46,19 @@ public class SMTPAgent {
 	@Inject
 	SslConfigs sslConfigs;
 
+	@Inject
+	SubmissionConfigs submissionConfigs;
+
 	public void start()
 	{
+		logger.infof("application.content-folder = %s", fetchContentFolder() );
 		logger.infof("application.server.hostname = %s", fetchServiceHost() );
 		logger.infof("application.server.port = %s", getPort() );
 		logger.infof("application.server.external-port = %s", getExternalPort() );
 		logger.infof("application.server.ssl.port = %s", getSslPort() );
 		logger.infof("application.server.ssl.external-port = %s", getSslExternalPort() );
-		logger.infof("application.content-folder = %s", fetchContentFolder() );
+		logger.infof("application.server.submission.port = %s", getSubmissionPort() );
+		logger.infof("application.server.submission.external-port = %s", getSubmissionExternalPort() );
 
 		Executors.newSingleThreadExecutor().submit(() -> startServer());
 	}
@@ -74,29 +80,41 @@ public class SMTPAgent {
 
 	private void stopServer()
 	{
-		stopInsecure();
-		stopSecure();
+		stopSmtp();
+		stopSubmission();
+		stopSecureSubmission();
 	}
 
-	private void stopInsecure()
+	private void stopSmtp()
 	{
 		try {
 			if(this.server != null && !this.server.isClosed()) {
 				this.server.close();
 			}
 		} catch (IOException failure) {
-			logger.warnf(failure.getMessage());
+			logger.warnf("[stopSmtp] %s", failure.getMessage());
 		}
 	}
 
-	private void stopSecure()
+	private void stopSubmission()
+	{
+		try {
+			if(this.submissionServer != null && !this.submissionServer.isClosed()) {
+				this.submissionServer.close();
+			}
+		} catch (IOException failure) {
+			logger.warnf("[stopSubmission] %s", failure.getMessage());
+		}
+	}
+
+	private void stopSecureSubmission()
 	{
 		try {
 			if(this.sslServer != null && !this.sslServer.isClosed()) {
 				this.sslServer.close();
 			}
 		} catch (IOException failure) {
-			logger.warnf(failure.getMessage());
+			logger.warnf("[stopSecureSubmission] %s", failure.getMessage());
 		}
 	}
 
@@ -138,6 +156,16 @@ public class SMTPAgent {
 		return sslConfigs.port();
 	}
 
+	private Integer getSubmissionExternalPort()
+	{
+		return submissionConfigs.externalPort().orElseGet(this::getSubmissionPort);
+	}
+
+	private Integer getSubmissionPort()
+	{
+		return submissionConfigs.port();
+	}
+
 	private String fetchContentFolder()
 	{
 		return configs.contentFolder().orElseGet(() -> System.getProperty("java.io.tmpdir"));
@@ -156,6 +184,8 @@ public class SMTPAgent {
 
 	private ServerSocket server;
 
+	private ServerSocket submissionServer;
+
 	private SSLServerSocket sslServer;
 
 	private SSLSocketFactory sslSocketFactory;
@@ -163,23 +193,22 @@ public class SMTPAgent {
 	private void mountServers() throws Exception {
         this.serviceHost = fetchServiceHost();
 
-		this.whitelist = AppUtils.listOf
-		(
-			configs.server().fqdn().flatMap(Configs.Server.Fqdn::whitelist)
-		)
-		.orElseGet(()-> List.of("localhost"));
+		this.whitelist = AppUtils
+			.listOf(configs.server().fqdnWhitelist())
+			.orElseGet(()-> List.of("localhost"));
 
 		this.contentFolder = fetchContentFolder();
 
 		final var address = InetAddress.getByName(serviceHost);
-		final var socketAddress = new InetSocketAddress(address, getPort());
-
 		this.serviceAddress = address.getHostAddress();
 
+		final var socketAddress = new InetSocketAddress(address, getPort());
 		this.server = new ServerSocket();
 		this.server.bind(socketAddress);
 
-		final var executorService = Executors.newFixedThreadPool(2);
+		final var submissionSocketAddress = new InetSocketAddress(address, getSubmissionPort());
+		this.submissionServer = new ServerSocket();
+		this.submissionServer.bind(submissionSocketAddress);
 
         // KeyManagerFactory
 
@@ -232,63 +261,87 @@ public class SMTPAgent {
 
         this.sslServer.setSSLParameters(params);
 
-		executorService.submit(() -> this.startInsecureServer());
-
-		executorService.submit(() -> this.startSecureServer());
+		Executors.newSingleThreadExecutor().submit(() -> this.startSmtp());
+		Executors.newSingleThreadExecutor().submit(() -> this.startSubmission());
+		Executors.newSingleThreadExecutor().submit(() -> this.startSecureSubmission());
 	}
 
-	private void startInsecureServer()
+	private void startSmtp()
 	{
-		logger.infof(">>> Server started on port %s <<<", getPort());
+		logger.infof(">>> [SMTP] started on port %s <<<", getPort());
 
 		while (true) {
 			Socket client = null;
 			try {
 				client = server.accept();
 			} catch (IOException failure) {
-				logger.warn(failure.getMessage());
 				break;
 			}
 
 			logger.info("\n");
-			logger.trace("--- Server got new connection ---");
+			logger.trace("--- [SMTP] got new connection ---");
 
 			this.threads.submit(
-				new SMTPWorker(client, this.serviceAddress, UUID.randomUUID(), whitelist)
+				new SMTPWorker(client, Mode.SMTP, this.serviceAddress, UUID.randomUUID(), whitelist)
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
 			);
 		}
 
-		logger.trace("--- Server not accepting new connections");
+		logger.trace("--- [SMTP] not accepting new connections");
 	}
 
-	private void startSecureServer()
+	private void startSubmission()
 	{
-		logger.infof(">>> TLS Server started on port %s <<<", getSslPort());
+		logger.infof(">>> [Submission] started on port %s <<<", getSubmissionPort());
+
+		while (true) {
+			Socket client = null;
+			try {
+				client = submissionServer.accept();
+			} catch (IOException failure) {
+				break;
+			}
+
+			logger.info("\n");
+			logger.trace("--- [Submission] got new connection ---");
+
+			this.threads.submit(
+				new SMTPWorker(client, Mode.SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
+					.setHostname(this.serviceHost)
+					.setContentFolder(this.contentFolder)
+					.setSslSocketFactory(this.sslSocketFactory)
+			);
+		}
+
+		logger.trace("--- [Submission] not accepting new connections");
+	}
+
+	private void startSecureSubmission()
+	{
+		logger.infof(">>> [SSL Submission] started on port %s <<<", getSslPort());
 
 		while (true) {
 			SSLSocket client = null;
 			try {
 				client = (SSLSocket) sslServer.accept();
 			} catch (IOException failure) {
-				logger.warn(failure.getMessage());
 				break;
 			}
 
 			logger.info("\n");
-			logger.trace("--- TLS Server got new connection ---");
+			logger.trace("--- [SSL Submission] got new connection ---");
 
 			this.threads.submit(
-				new SMTPWorker(client, this.serviceAddress, UUID.randomUUID(), whitelist)
+				new SMTPWorker(client, Mode.SECURE_SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
 			);
 		}
 
-		logger.trace("--- TLS Server not accepting new connections");
+		logger.trace("--- [SSL Submission] not accepting new connections");
 	}
 
 }

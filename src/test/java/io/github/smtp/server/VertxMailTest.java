@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.github.smtp.configs.Configs;
+import io.github.smtp.configs.SslConfigs;
 import io.quarkus.test.junit.QuarkusTest;
 
 import io.vertx.ext.mail.MailConfig;
@@ -27,6 +28,9 @@ import io.vertx.core.buffer.Buffer;
 public class VertxMailTest {
     @Inject
     Configs configs;
+
+    @Inject
+    SslConfigs sslConfigs;
 
     @Inject
     SMTPAgent server;
@@ -52,7 +56,7 @@ public class VertxMailTest {
     @Test
     public void sendMailSuccess() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
-        final Integer port = configs.server().port();
+        final Integer port = sslConfigs.port();
 
         final String username = "admin@example.com";
         final String password = "myp@77";
@@ -76,9 +80,11 @@ public class VertxMailTest {
         final MailConfig config = new MailConfig()
             .setOwnHostname("quarkus-mailer.example.com")
             .setHostname(hostname)
+            .setPipelining(true)
             .setPort(port)
+            .setSsl(true)
             .setLogin(LoginOption.REQUIRED)
-            .setStarttls(StartTLSOptions.REQUIRED)
+            .setStarttls(StartTLSOptions.DISABLED)
             .setTrustAll(true)
             .setUsername(username)
             .setPassword(password);

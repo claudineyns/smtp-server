@@ -2,15 +2,10 @@ package io.github.smtp.server;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -23,12 +18,10 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 
 @QuarkusTest
-public class SequenceTest {
-    static final Charset ASCII = StandardCharsets.US_ASCII;
-
-    static final int read_timeout = 250;
+public class SequenceTest extends BaseTest {
+    static final int start_timeout = 250;
     static final int connect_timeout = 500;
-    static final int start_timeout = 500;
+    static final int read_timeout = 250;
 
     @Inject
     Configs configs;
@@ -51,35 +44,9 @@ public class SequenceTest {
         server.stop();
     }
 
-    String content(final InputStream in) {
-        final ByteArrayOutputStream data = new ByteArrayOutputStream();
-
-        int reader = -1;
-        try {
-            while((reader = in.read()) != -1) {
-                data.write(reader);
-            }
-        } catch(IOException e) {}
-
-        final byte[] raw = data.toByteArray();
-
-        if(raw.length == 0)
-        {
-            return new String(raw, ASCII);
-        }
-
-        if(raw[raw.length-2] == '\r' && raw[raw.length-1] == '\n')
-        {
-            return new String(raw, 0, raw.length - 2, ASCII);
-        }
-
-        return new String(raw, ASCII);
-    }
-
     void request(final OutputStream out, final String request) throws Exception {
         out.write(request.getBytes(ASCII));
         out.flush();
-        Thread.sleep(250);
     }
 
     String response(final InputStream in) throws Exception {

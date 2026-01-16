@@ -63,7 +63,6 @@ public class RelayTest {
     void request(final String request, final OutputStream out) throws Exception {
         out.write(request.getBytes(ASCII));
         out.flush();
-        Thread.sleep(250);
     }
 
     String response(final InputStream in) throws Exception {
