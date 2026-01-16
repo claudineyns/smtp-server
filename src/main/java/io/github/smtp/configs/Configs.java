@@ -7,24 +7,19 @@ import io.smallrye.config.ConfigMapping;
 @ConfigMapping(prefix = "application")
 public interface Configs
 {
-    Optional<String> contentFolder();
-
     Server server();
+
+    Optional<String> contentFolder();
 
     interface Server
     {
-        Optional<String> hostname();
-
         Integer port();
 
+        Optional<String> hostname();
+        
         Optional<Integer> externalPort();
 
-        Optional<Fqdn> fqdn();
-
-        interface Fqdn
-        {
-            Optional<String> whitelist();
-        }
+        Optional<String> fqdnWhitelist();
 
     }
 

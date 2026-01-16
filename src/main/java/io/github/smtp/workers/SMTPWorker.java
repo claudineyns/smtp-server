@@ -29,9 +29,12 @@ import javax.net.ssl.SSLSocketFactory;
 import org.jboss.logging.Logger;
 
 import io.github.smtp.protocol.SmtpError;
+import io.github.smtp.server.Mode;
 
 public class SMTPWorker implements Runnable {
     private final Logger logger = Logger.getLogger(getClass());
+
+    private final Mode mode;
 
     @SuppressWarnings("unused")
     private final UUID sessionId;
@@ -54,12 +57,14 @@ public class SMTPWorker implements Runnable {
     
     public SMTPWorker(
         final Socket socket,
+        final Mode mode,
         final String serverAddress,
         final UUID id,
         final List<String> whiteList
     )
     {
         this.socket = socket;
+        this.mode = mode;
         this.serverAddress = serverAddress;
         this.sessionId = id;
         this.whiteList.addAll(whiteList);
@@ -106,7 +111,10 @@ public class SMTPWorker implements Runnable {
         try {
             process();
         } catch (IOException failure) {
-            logger.warn(failure.getMessage());
+            logger.warnf("[%s] (processRequest) <%s> %s",
+                this.mode.name(),
+                failure.getClass().getName(),
+                failure.getMessage());
         } finally {
             close();
         }
@@ -152,7 +160,7 @@ public class SMTPWorker implements Runnable {
 
     private byte startPresentation() throws IOException {
         final String presentation = "220 " + this.hostname + " ESMTP Ready";
-        logger.debug(presentation);
+        logger.infof("S: %s", presentation);
 
         writeLine(os, presentation);
         os.flush();
@@ -224,20 +232,23 @@ public class SMTPWorker implements Runnable {
             return expand(statement, raw);
         }
 
-        if ("AUTH LOGIN".equalsIgnoreCase(statement)) {
-            return authLogin();
-        }
+        if( ! Mode.SMTP.equals(this.mode))
+        {
+            if ("AUTH LOGIN".equalsIgnoreCase(statement)) {
+                return authLogin();
+            }
 
-        if (statement.regionMatches(true, 0, "AUTH LOGIN ", 0, 11)) {
-            return authLogin(statement, raw);
-        }
+            if (statement.regionMatches(true, 0, "AUTH LOGIN ", 0, 11)) {
+                return authLogin(statement, raw);
+            }
 
-        if ("AUTH PLAIN".equalsIgnoreCase(statement)) {
-            return authPlain("", raw);
-        }
+            if ("AUTH PLAIN".equalsIgnoreCase(statement)) {
+                return authPlain("", raw);
+            }
 
-        if (statement.regionMatches(true, 0, "AUTH PLAIN ", 0, 11)) {
-            return authPlain(statement.substring(11), raw);
+            if (statement.regionMatches(true, 0, "AUTH PLAIN ", 0, 11)) {
+                return authPlain(statement.substring(11), raw);
+            }
         }
 
         if (statement.regionMatches(true, 0, "MAIL FROM:", 0, 10)) {
@@ -305,14 +316,18 @@ public class SMTPWorker implements Runnable {
         responses.add("250-SIZE " + MAX_MESSAGE_SIZE);
         responses.add("250-ENHANCEDSTATUSCODES");
         responses.add("250-PIPELINING");
-        if(this.isSecure)
+
+        if( ! Mode.SMTP.equals(this.mode) && this.isSecure )
         {
             responses.add("250-AUTH LOGIN PLAIN");
             responses.add("250-AUTH=LOGIN PLAIN");
-        } else
+        }
+
+        if( ! Mode.SECURE_SUBMISSION.equals(this.mode) && ! this.isSecure )
         {
             responses.add("250-STARTTLS");
         }
+
         responses.add("250-HELP");
         responses.add("250-SMTPUTF8");
         responses.add("250 8BITMIME");
