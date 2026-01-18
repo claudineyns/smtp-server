@@ -19,7 +19,7 @@ import io.github.smtp.configs.SslConfigs;
 import io.github.smtp.configs.SubmissionConfigs;
 import io.github.smtp.configs.UtilConfigs;
 import io.github.smtp.utils.AppUtils;
-import io.github.smtp.workers.SMTPWorker;
+import io.github.smtp.workers.SmtpWorker;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -36,7 +36,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 @ApplicationScoped
-public class SMTPAgent {
+public class SmtpAgent {
 	@Inject
 	Logger logger;
 
@@ -53,6 +53,7 @@ public class SMTPAgent {
 	{
 		logger.infof("application.content-folder = %s", fetchContentFolder() );
 		logger.infof("application.server.hostname = %s", fetchServiceHost() );
+		configs.server().fqdnWhitelist().ifPresent(l -> logger.infof("application.server.fqdn-whitelist = %s", l));
 		logger.infof("application.server.port = %s", getPort() );
 		logger.infof("application.server.external-port = %s", getExternalPort() );
 		logger.infof("application.server.ssl.port = %s", getSslPort() );
@@ -282,7 +283,7 @@ public class SMTPAgent {
 			logger.trace("--- [SMTP] got new connection ---");
 
 			this.threads.submit(
-				new SMTPWorker(client, Mode.SMTP, this.serviceAddress, UUID.randomUUID(), whitelist)
+				new SmtpWorker(client, Mode.SMTP, this.serviceAddress, UUID.randomUUID(), whitelist)
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
@@ -308,7 +309,7 @@ public class SMTPAgent {
 			logger.trace("--- [Submission] got new connection ---");
 
 			this.threads.submit(
-				new SMTPWorker(client, Mode.SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
+				new SmtpWorker(client, Mode.SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
@@ -334,7 +335,7 @@ public class SMTPAgent {
 			logger.trace("--- [SSL Submission] got new connection ---");
 
 			this.threads.submit(
-				new SMTPWorker(client, Mode.SECURE_SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
+				new SmtpWorker(client, Mode.SECURE_SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)

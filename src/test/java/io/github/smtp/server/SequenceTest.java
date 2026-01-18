@@ -27,7 +27,7 @@ public class SequenceTest extends BaseTest {
     Configs configs;
 
     @Inject
-    SMTPAgent server;
+    SmtpAgent server;
 
     @Inject
     Logger logger;

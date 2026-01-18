@@ -21,7 +21,7 @@ public class MailTest extends BaseTest {
     Configs configs;
 
     @Inject
-    SMTPAgent server;
+    SmtpAgent server;
 
     @Inject
     Vertx vertx;
