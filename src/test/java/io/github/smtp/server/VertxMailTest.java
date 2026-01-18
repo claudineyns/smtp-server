@@ -33,7 +33,7 @@ public class VertxMailTest {
     SslConfigs sslConfigs;
 
     @Inject
-    SMTPAgent server;
+    SmtpAgent server;
 
     @Inject
     Vertx vertx;

@@ -43,7 +43,7 @@ public class TlsTest extends BaseTest {
     SubmissionConfigs submissionConfigs;
 
     @Inject
-    SMTPAgent server;
+    SmtpAgent server;
 
     @Inject
     Logger logger;

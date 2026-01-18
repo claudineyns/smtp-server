@@ -30,7 +30,7 @@ public class RelayTest {
     Configs configs;
 
     @Inject
-    SMTPAgent server;
+    SmtpAgent server;
 
     @Inject
     Logger logger;

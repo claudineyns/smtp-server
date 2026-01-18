@@ -31,7 +31,9 @@ import org.jboss.logging.Logger;
 import io.github.smtp.protocol.SmtpError;
 import io.github.smtp.server.Mode;
 
-public class SMTPWorker implements Runnable {
+import static io.github.smtp.utils.AppUtils.*;
+
+public class SmtpWorker implements Runnable {
     private final Logger logger = Logger.getLogger(getClass());
 
     private final Mode mode;
@@ -52,10 +54,11 @@ public class SMTPWorker implements Runnable {
     private final String timestamp;
 
     private final List<String> whiteList = new LinkedList<>();
+    private final boolean acceptAllDomains;
 
     private boolean isSecure = false;
     
-    public SMTPWorker(
+    public SmtpWorker(
         final Socket socket,
         final Mode mode,
         final String serverAddress,
@@ -68,6 +71,8 @@ public class SMTPWorker implements Runnable {
         this.serverAddress = serverAddress;
         this.sessionId = id;
         this.whiteList.addAll(whiteList);
+
+        this.acceptAllDomains = this.whiteList.contains("*");
 
         this.timestamp = ZonedDateTime
             .now(ZoneId.systemDefault())
@@ -82,21 +87,21 @@ public class SMTPWorker implements Runnable {
     }
 
     private String hostname;
-    public SMTPWorker setHostname(final String hostname)
+    public SmtpWorker setHostname(final String hostname)
     {
         this.hostname = hostname;
         return this;
     }
 
     private String contentFolder;
-    public SMTPWorker setContentFolder(final String contentFolder)
+    public SmtpWorker setContentFolder(final String contentFolder)
     {
         this.contentFolder = contentFolder;
         return this;
     }
 
     private SSLSocketFactory sslSocketFactory;
-    public SMTPWorker setSslSocketFactory(SSLSocketFactory sslSocketFactory)
+    public SmtpWorker setSslSocketFactory(SSLSocketFactory sslSocketFactory)
     {
         this.sslSocketFactory = sslSocketFactory;
         return this;
@@ -196,79 +201,97 @@ public class SMTPWorker implements Runnable {
 
         logger.infof("C: %s", statement);
 
-        if ("QUIT".equalsIgnoreCase(statement)) {
+        if ("QUIT".equalsIgnoreCase(statement))
+        {
             quit(); // will throw exception to close
         }
 
-        if ("HELP".equalsIgnoreCase(statement)) {
+        if ("HELP".equalsIgnoreCase(statement))
+        {
             return help();
         }
 
-        if (statement.regionMatches(true, 0, "HELO ", 0, 5)) {
+        if ("NOOP".equalsIgnoreCase(statement))
+        {
+            return noop();
+        }
+
+        if ("RSET".equalsIgnoreCase(statement))
+        {
+            return rset();
+        }
+
+        if ( matchesStart(statement, "HELO ") )
+        {
             return helo(statement, raw);
         }
 
-        if (statement.regionMatches(true, 0, "EHLO ", 0, 5)) {
+        if ( matchesStart(statement, "EHLO ") )
+        {
             return ehlo(statement, raw);
         }
 
-        if ("STARTTLS".equalsIgnoreCase(statement)) {
+        if ("STARTTLS".equalsIgnoreCase(statement))
+        {
             return startTls();
         }
 
-        if ("VRFY".equalsIgnoreCase(statement)) {
+        if ("VRFY".equalsIgnoreCase(statement))
+        {
             return verifyBadSintax();
         }
 
-        if (statement.regionMatches(true, 0, "VRFY ", 0, 5)) {
+        if ( matchesStart(statement, "VRFY ") )
+        {
             return verify(statement, raw);
         }
 
-        if ("EXPN".equalsIgnoreCase(statement)) {
+        if ("EXPN".equalsIgnoreCase(statement))
+        {
             return verifyBadSintax();
         }
 
-        if (statement.regionMatches(true, 0, "EXPN ", 0, 5)) {
+        if ( matchesStart(statement, "EXPN ") )
+        {
             return expand(statement, raw);
         }
 
         if( ! Mode.SMTP.equals(this.mode))
         {
-            if ("AUTH LOGIN".equalsIgnoreCase(statement)) {
+            if ("AUTH LOGIN".equalsIgnoreCase(statement))
+            {
                 return authLogin();
             }
 
-            if (statement.regionMatches(true, 0, "AUTH LOGIN ", 0, 11)) {
+            if ( matchesStart(statement, "AUTH LOGIN ") )
+            {
                 return authLogin(statement, raw);
             }
 
-            if ("AUTH PLAIN".equalsIgnoreCase(statement)) {
+            if ("AUTH PLAIN".equalsIgnoreCase(statement))
+            {
                 return authPlain("", raw);
             }
 
-            if (statement.regionMatches(true, 0, "AUTH PLAIN ", 0, 11)) {
+            if ( matchesStart(statement, "AUTH PLAIN ") )
+            {
                 return authPlain(statement.substring(11), raw);
             }
         }
 
-        if (statement.regionMatches(true, 0, "MAIL FROM:", 0, 10)) {
+        if ( matchesStart(statement, "MAIL FROM:") )
+        {
             return mailFrom(statement, raw);
         }
 
-        if (statement.regionMatches(true, 0, "RCPT TO:", 0, 8)) {
+        if ( matchesStart(statement, "RCPT TO:") )
+        {
             return rcptTo(statement, raw);
         }
 
-        if ("NOOP".equalsIgnoreCase(statement)) {
-            return noop();
-        }
-
-        if ("DATA".equalsIgnoreCase(statement)) {
+        if ("DATA".equalsIgnoreCase(statement))
+        {
             return data();
-        }
-
-        if ("RSET".equalsIgnoreCase(statement)) {
-            return rset();
         }
 
         return invalidCommand();
@@ -461,7 +484,7 @@ public class SMTPWorker implements Runnable {
 
         logger.info("S: Awaiting for " + usernameLabel);
 
-        final byte[] data = concatEndLine(
+        final byte[] data = joinEndLine(
             asciiraw("334 "),
             Base64.getEncoder().encode(asciiraw(usernameLabel))
         );
@@ -521,7 +544,7 @@ public class SMTPWorker implements Runnable {
         final String passwordLabel = "Password:"; // base64: UGFzc3dvcmQ6
         logger.info("S: Awaiting for " + passwordLabel);
 
-        final byte[] data = concatEndLine(
+        final byte[] data = joinEndLine(
             asciiraw("334 "),
             Base64.getEncoder().encode(asciiraw(passwordLabel))
         );
@@ -757,7 +780,7 @@ public class SMTPWorker implements Runnable {
         this.fromHost = Boolean.FALSE;
         this.whiteList
             .stream()
-            .filter(host -> sender.getDomain().equals(host.toLowerCase()))
+            .filter(host -> checkDomain(host, sender.getDomain()) )
             .findFirst()
             .ifPresent(q -> fromHost = Boolean.TRUE);
 
@@ -791,6 +814,22 @@ public class SMTPWorker implements Runnable {
         os.flush();
 
         return 0;
+    }
+
+    private boolean checkDomain(final String whiteDomain, final String domain)
+    {
+        if(acceptAllDomains)
+        {
+            return true;
+        }
+
+        if(whiteDomain.startsWith("*"))
+        {
+            final String subdomain = whiteDomain.substring(1);
+            return matchesEnd(domain, subdomain);
+        }
+
+        return whiteDomain.equalsIgnoreCase(domain);
     }
 
     private void parseMailParams(final String statement)
@@ -856,7 +895,7 @@ public class SMTPWorker implements Runnable {
         this.toHost = Boolean.FALSE;
         this.whiteList
                 .stream()
-                .filter(host -> "relay".equals(host) || recipient.getDomain().equals(host))
+                .filter( host -> checkDomain(host, recipient.getDomain()) )
                 .findFirst()
                 .ifPresent(host -> toHost = Boolean.TRUE);
 
@@ -1209,43 +1248,9 @@ public class SMTPWorker implements Runnable {
 
     private void writeLine(final OutputStream out, final Object content) throws IOException
     {
-        final byte[] raw = concatEndLine(asciiraw(content.toString()));
+        final byte[] raw = joinEndLine(asciiraw(content.toString()));
 
         out.write(raw);
-    }
-
-    private byte[] asciiraw(final CharSequence content)
-    {
-        return content.toString().getBytes(StandardCharsets.US_ASCII);
-    }
-
-    private byte[] utf8raw(final CharSequence content)
-    {
-        return content.toString().getBytes(StandardCharsets.UTF_8);
-    }
-
-    private byte[] concatEndLine(final byte[]... sources)
-    {
-        int size = 0;
-        for(byte[] q: sources)
-        {
-            size += q.length;
-        }
-
-        final byte[] raw = new byte[size + 2];
-        int c = 0;
-        for(byte[] q: sources)
-        {
-            for(byte b: q)
-            {
-                raw[c++] = b;
-            }
-        }
-
-        raw[c++] = '\r';
-        raw[c++] = '\n';
-
-        return raw;
     }
 
     static class Mailbox {

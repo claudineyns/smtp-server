@@ -2,7 +2,7 @@ package io.github.smtp.application;
 
 import org.jboss.logging.Logger;
 
-import io.github.smtp.server.SMTPAgent;
+import io.github.smtp.server.SmtpAgent;
 import io.quarkus.runtime.Quarkus;
 import io.quarkus.runtime.QuarkusApplication;
 import io.quarkus.runtime.annotations.QuarkusMain;
@@ -17,7 +17,7 @@ public class Application implements QuarkusApplication
     Logger logger;
 
     @Inject
-    SMTPAgent server;
+    SmtpAgent server;
 
     @PostConstruct
     void startup()
