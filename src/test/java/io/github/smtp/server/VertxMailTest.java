@@ -53,13 +53,36 @@ public class VertxMailTest {
         server.stop();
     }
 
+    static final String USERNAME = "admin@example.com";
+    static final String PASSWORD = "myp@77";
+
+    static final String DEFAULT_HOSTNAME = "localhost";
+    static final String EHLO_HOSTNAME = "quarkus-mailer.example.com";
+
     @Test
-    public void sendMailSuccess() throws Exception {
-        final String hostname = configs.server().hostname().orElse("localhost");
+    public void sendMailSuccess() throws Exception
+    {
+        final MailConfig config = new MailConfig();
+
+        sendMail(config);
+    }
+
+    private void sendMail(final MailConfig config) throws Exception
+    {
+        final String hostname = configs.server().hostname().orElse(DEFAULT_HOSTNAME);
         final Integer port = sslConfigs.port();
 
-        final String username = "admin@example.com";
-        final String password = "myp@77";
+        config
+            .setHostname(hostname)
+            .setPort(port)
+            .setOwnHostname(EHLO_HOSTNAME)
+            .setPipelining(true)
+            .setSsl(true)
+            .setLogin(LoginOption.REQUIRED)
+            .setUsername(USERNAME)
+            .setPassword(PASSWORD)
+            .setStarttls(StartTLSOptions.DISABLED)
+            .setTrustAll(true);
 
         final StringBuilder text = new StringBuilder("");
         text.append("Lorem ipsum dolor sit amet, consectetur adipiscing elit.\r\n");
@@ -76,18 +99,6 @@ public class VertxMailTest {
             .build();
 
         final byte[] raw = http.send(request, HttpResponse.BodyHandlers.ofByteArray()).body();
-
-        final MailConfig config = new MailConfig()
-            .setOwnHostname("quarkus-mailer.example.com")
-            .setHostname(hostname)
-            .setPipelining(true)
-            .setPort(port)
-            .setSsl(true)
-            .setLogin(LoginOption.REQUIRED)
-            .setStarttls(StartTLSOptions.DISABLED)
-            .setTrustAll(true)
-            .setUsername(username)
-            .setPassword(password);
 
         final MailClient client = MailClient.create(vertx, config);
 
