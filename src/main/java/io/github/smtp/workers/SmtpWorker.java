@@ -850,12 +850,11 @@ public class SmtpWorker implements Runnable {
 
         parseMailParams(statement);
 
-        this.fromHost = Boolean.FALSE;
-        this.whiteList
+        this.fromHost = this.whiteList
             .stream()
-            .filter(host -> checkDomain(host, sender.getDomain()) )
+            .filter( h -> h.equalsIgnoreCase(sender.getDomain()) )
             .findFirst()
-            .ifPresent(q -> fromHost = Boolean.TRUE);
+            .isPresent();
 
         final StringBuilder response = new StringBuilder();
 
@@ -965,12 +964,11 @@ public class SmtpWorker implements Runnable {
 
         final Mailbox recipient = new Mailbox(name, user, domain);
 
-        this.toHost = Boolean.FALSE;
-        this.whiteList
-                .stream()
-                .filter( host -> checkDomain(host, recipient.getDomain()) )
-                .findFirst()
-                .ifPresent(host -> toHost = Boolean.TRUE);
+        this.toHost = this.whiteList
+            .stream()
+            .filter( host -> checkDomain(host, recipient.getDomain()) )
+            .findFirst()
+            .isPresent();
 
         final List<String> responses = new ArrayList<>();
 
@@ -978,9 +976,7 @@ public class SmtpWorker implements Runnable {
             responses.add(SmtpError.SENDER_MISSING.toString());
         } else if (Boolean.FALSE.equals(fromHost) && Boolean.FALSE.equals(toHost)) {
             toHost = null;
-            // responses.add("551-5.7.1 You've been a naughty guy, right?");
-            responses.add("551-5.7.1 Forwarding to remote hosts is not acceptable");
-            responses.add("551 5.7.1 Select another host to act as your forwarder");
+            responses.add("551 5.7.1 Relaying forbidden");
         } else {
             this.recipients.add(recipient);
             responses.add(String.format("250 2.1.0 <%s>: Recipient OK", recipient.getEmail()));
