@@ -145,6 +145,7 @@ public class SmtpWorker implements Runnable {
         logger.debugf("Remote peer: %s --- connection closed", this.clientAddress);
     }
 
+    int commandLength = 0;
     private void process() throws IOException {
         if(this.clientAddress.equals(this.clientHostname))
         {
@@ -181,15 +182,32 @@ public class SmtpWorker implements Runnable {
             if (reader == '\r') {
                 continue;
             }
+
             if (reader == '\n') {
+                if(commandLength > MAX_COMMAND_LENGTH)
+                {
+                    invalidCommand();
+                    continue;
+                }
+
                 try {
-                    checkStatement(st.toByteArray());
+                    final byte[] raw = st.toByteArray();
+                    st.reset();;
+                    checkStatement(raw);
                 } catch (IOException e) {
                     break;
                 }
-                st.reset();
-            } else {
+
+                continue;
+            }
+
+            commandLength += 1;
+            if(commandLength <= MAX_COMMAND_LENGTH)
+            {
                 st.write(reader);
+            } else if(st.size() > 0)
+            {
+                st.reset();
             }
         }
 
@@ -223,12 +241,12 @@ public class SmtpWorker implements Runnable {
 
         if ( matchesStart(statement, "HELO ") )
         {
-            return helo(statement, raw);
+            return helo(statement);
         }
 
         if ( matchesStart(statement, "EHLO ") )
         {
-            return ehlo(statement, raw);
+            return ehlo(statement);
         }
 
         if ("STARTTLS".equalsIgnoreCase(statement))
@@ -243,7 +261,7 @@ public class SmtpWorker implements Runnable {
 
         if ( matchesStart(statement, "VRFY ") )
         {
-            return verify(statement, raw);
+            return verify(statement);
         }
 
         if ("EXPN".equalsIgnoreCase(statement))
@@ -253,7 +271,7 @@ public class SmtpWorker implements Runnable {
 
         if ( matchesStart(statement, "EXPN ") )
         {
-            return expand(statement, raw);
+            return expand(statement);
         }
 
         if( ! Mode.SMTP.equals(this.mode))
@@ -270,23 +288,23 @@ public class SmtpWorker implements Runnable {
 
             if ("AUTH PLAIN".equalsIgnoreCase(statement))
             {
-                return authPlain("", raw);
+                return authPlain("");
             }
 
             if ( matchesStart(statement, "AUTH PLAIN ") )
             {
-                return authPlain(statement.substring(11), raw);
+                return authPlain(statement.substring(11));
             }
         }
 
         if ( matchesStart(statement, "MAIL FROM:") )
         {
-            return mailFrom(statement, raw);
+            return mailFrom(statement);
         }
 
         if ( matchesStart(statement, "RCPT TO:") )
         {
-            return rcptTo(statement, raw);
+            return rcptTo(statement);
         }
 
         if ("DATA".equalsIgnoreCase(statement))
@@ -294,13 +312,82 @@ public class SmtpWorker implements Runnable {
             return data();
         }
 
+        if ("BDAT".equalsIgnoreCase(statement))
+        {
+            return syntaxError();
+        }
+
+        if ( matchesStart(statement, "BDAT ") )
+        {
+            return binaryData(statement);
+        }
+
         return invalidCommand();
     }
 
+    private byte verifyBadSintax() throws IOException
+    {
+        logger.infof("S: %s", SmtpError.MAILBOX_MISSING);
+
+        writeLine(os, SmtpError.MAILBOX_MISSING);
+        os.flush();
+
+        return 0;
+    }
+
+    private byte messageSizeExceeded() throws IOException
+    {
+        logger.infof("S: %s", SmtpError.MESSAGE_TOO_BIG);
+
+        writeLine(os, SmtpError.MESSAGE_TOO_BIG);
+        os.flush();
+
+        return 1;
+    }
+
+    @SuppressWarnings("unused")
+    private byte unavailable() throws IOException {
+        final String message = SmtpError.UNAVAILABLE.withHost(this.hostname);
+        logger.infof("S: %s", message);
+
+        writeLine(os, message);
+        os.flush();
+
+        return 0;
+    }
+
+    private byte invalidCommand() throws IOException {
+        logger.infof("S: %s", SmtpError.INVALID_COMMAND);
+
+        writeLine(os, SmtpError.INVALID_COMMAND);
+        os.flush();
+
+        return 0;
+    }
+
+    private byte syntaxError() throws IOException {
+        logger.infof("S: %s", SmtpError.SYNTAX_ERROR);
+
+        writeLine(os, SmtpError.SYNTAX_ERROR);
+        os.flush();
+
+        return 0;
+    }
+
+    @SuppressWarnings("unused")
+    private byte securityPolicy() throws IOException {
+        logger.infof("S: %s", SmtpError.SECURITY_POLICY);
+
+        writeLine(os, SmtpError.SECURITY_POLICY);
+        os.flush();
+
+        return 0;
+    }
+    
     private byte help() throws IOException {
         final StringBuilder response = new StringBuilder();
 
-        response.append("211 2.0.0 EHLO HELO NOOP RSET VRFY EXPN AUTH MAIL RCPT DATA HELP");
+        response.append("211 2.0.0 EHLO HELO NOOP RSET VRFY EXPN AUTH MAIL RCPT HELP DATA BDAT");
         logger.infof("S: %s", response);
 
         writeLine(os, response);
@@ -315,7 +402,7 @@ public class SmtpWorker implements Runnable {
 
     private String heloHost;
 
-    private byte helo(final String statement, final byte[] raw) throws IOException {
+    private byte helo(final String statement) throws IOException {
         this.heloHost = statement.substring(5);
 
         final String response = "250 " + this.hostname + " greets " + this.heloHost;
@@ -325,11 +412,9 @@ public class SmtpWorker implements Runnable {
         os.flush();
 
         return 0;
-    }
+    }   
 
-    static final long MAX_MESSAGE_SIZE = 2 * 1024 * 1024;
-
-    private byte ehlo(final String statement, final byte[] raw) throws IOException
+    private byte ehlo(final String statement) throws IOException
     {
         this.heloHost = statement.substring(5);
 
@@ -353,7 +438,9 @@ public class SmtpWorker implements Runnable {
 
         responses.add("250-HELP");
         responses.add("250-SMTPUTF8");
-        responses.add("250 8BITMIME");
+        responses.add("250-8BITMIME");
+        responses.add("250-CHUNKING");
+        responses.add("250 BINARYMIME");
 
         final var accumulator = new StringBuilder();
         for(final String line: responses)
@@ -613,7 +700,7 @@ public class SmtpWorker implements Runnable {
         return new String(data.toByteArray(), StandardCharsets.US_ASCII);
     }
 
-    private byte authPlain(String credential, byte[] raw) throws IOException
+    private byte authPlain(String credential) throws IOException
     {
         if( ! this.isSecure )
         {
@@ -670,21 +757,7 @@ public class SmtpWorker implements Runnable {
         return 0;
     }
 
-    private byte verifyBadSintax() throws IOException
-    {
-        logger.infof("S: %s", SmtpError.MAILBOX_MISSING);
-
-        writeLine(os, SmtpError.MAILBOX_MISSING);
-        os.flush();
-
-        return 0;
-    }
-
-    static final Mailbox JOHN_EXAMPLE = new Mailbox("John Doe", "john.doe", "example.com");
-    static final Mailbox JANE_EXAMPLE = new Mailbox("Jane Doe", "jane.doe", "example.com");
-    static final Mailbox MAILING_LIST_EXAMPLE = new Mailbox("mailing@example.com");
-
-    private byte verify(String statement, byte[] raw) throws IOException {
+    private byte verify(final String statement) throws IOException {
         final List<String> responses = new ArrayList<>();
 
         final String mailbox = statement.substring(statement.indexOf(' ') + 1).trim();
@@ -717,7 +790,7 @@ public class SmtpWorker implements Runnable {
         return 0;
     }
 
-    private byte expand(String statement, byte[] raw) throws IOException {
+    private byte expand(final String statement) throws IOException {
         final List<String> responses = new ArrayList<>();
 
         final String mailbox = statement.substring(statement.indexOf(' ') + 1).trim();
@@ -750,7 +823,7 @@ public class SmtpWorker implements Runnable {
     private Mailbox sender = null;
     private Map<String, Object> mailParams = new LinkedHashMap<>();
 
-    private byte mailFrom(final String statement, final byte[] raw) throws IOException {
+    private byte mailFrom(final String statement) throws IOException {
         if(this.heloHost == null) {
             return introductionMissing();
         }
@@ -870,7 +943,7 @@ public class SmtpWorker implements Runnable {
     private Boolean toHost = null;
     private List<Mailbox> recipients = new LinkedList<>();
 
-    private byte rcptTo(final String statement, final byte[] raw) throws IOException {
+    private byte rcptTo(final String statement) throws IOException {
         if(this.heloHost == null)
         {
             return introductionMissing();
@@ -940,6 +1013,21 @@ public class SmtpWorker implements Runnable {
     // https://stackoverflow.com/questions/25710599/content-transfer-encoding-7bit-or-8-bit
 
     private byte data() throws IOException {
+        final String bodyContent = Optional
+            .ofNullable(this.mailParams.get(BODY))
+            .map(String.class::cast)
+            .orElse(null);
+
+        if(BINARYMIME.equalsIgnoreCase(bodyContent))
+        {
+            return invalidCommand();
+        }
+
+        if(this.binaryDataInProgress.size() > 0)
+        {
+            return invalidCommand();
+        }
+
         if(this.heloHost == null) {
             return introductionMissing();
         }
@@ -971,31 +1059,72 @@ public class SmtpWorker implements Runnable {
         return 0;
     }
 
-    @SuppressWarnings("unused")
-    private byte unavailable() throws IOException {
-        final String message = SmtpError.UNAVAILABLE.withHost(this.hostname);
-        logger.infof("S: %s", message);
+    private byte binaryData(final String statement) throws IOException {
+        if(this.heloHost == null) {
+            return introductionMissing();
+        }
 
-        writeLine(os, message);
-        os.flush();
+        BigInteger chunkSize = BigInteger.ZERO;
 
-        return 0;
-    }
+        final String[] args = statement
+            .replaceAll("\\s+$", "")
+            .replaceAll("\\s+", " ").split(" ");
 
-    private byte invalidCommand() throws IOException {
-        logger.infof("S: %s", SmtpError.INVALID_COMMAND);
+        if( args.length < 2 )
+        {
+            return syntaxError();
+        }
 
-        writeLine(os, SmtpError.INVALID_COMMAND);
-        os.flush();
+        try
+        {
+            chunkSize = new BigInteger(args[1]);
+        } catch(NumberFormatException failure)
+        {
+            logger.warn(failure.getMessage());
+            return syntaxError();
+        }
 
-        return 0;
-    }
+        if(chunkSize.compareTo(BigInteger.valueOf(MAX_MESSAGE_SIZE)) > 0)
+        {
+            return messageSizeExceeded();
+        }
 
-    @SuppressWarnings("unused")
-    private byte securityPolicy() throws IOException {
-        logger.infof("S: %s", SmtpError.SECURITY_POLICY);
+        final boolean lastChunk = args.length > 2 && LAST.equalsIgnoreCase(args[2]);
 
-        writeLine(os, SmtpError.SECURITY_POLICY);
+        boolean dataInProgress = false;
+
+        final StringBuilder response = new StringBuilder();
+
+        if (this.fromHost == null && this.toHost == null) {
+            response.append(SmtpError.RECIPIENTS_MISSING);
+        } else if (this.fromHost == null) {
+            response.append(SmtpError.SENDER_MISSING);
+        } else if (this.toHost == null) {
+            response.append(SmtpError.DESTINATION_MISSING);
+        } else {
+            if(lastChunk)
+            {
+                response.append("250 2.0.0 OK message queued");
+            } else
+            {
+                response.append("250 2.0.0 ").append(chunkSize).append(" bytes received");
+            }
+            dataInProgress = true;
+        }
+
+        if (dataInProgress) {
+            consumeBinaryData(chunkSize);
+        }
+
+        if(lastChunk)
+        {
+            dataReceived(binaryDataInProgress);
+            resetState();
+        }
+
+        logger.infof("S: %s", response);
+
+        writeLine(os, response);
         os.flush();
 
         return 0;
@@ -1003,11 +1132,13 @@ public class SmtpWorker implements Runnable {
 
     private void resetState()
     {
-        this.mailParams.clear();
-        this.authenticated = false;
+        this.sender = null;
         this.fromHost = null;
         this.toHost = null;
+
+        this.mailParams.clear();
         this.recipients.clear();
+        this.binaryDataInProgress.reset();
     }
 
     private byte rset() throws IOException {
@@ -1085,7 +1216,21 @@ public class SmtpWorker implements Runnable {
                 &&  control4 == '\n'
             )
             {
-                return safeData ? dataReceived(data) : messageSizeExceeded();
+                if(safeData)
+                {
+                    dataReceived(data);
+                    resetState();
+
+                    final String response = "250 2.0.0 OK Message queued";
+                    logger.infof("S: %s", response);
+
+                    writeLine(os, response);
+                    os.flush();
+
+                    return 0;
+                }
+
+                return messageSizeExceeded();
             }
 
             if(!safeData)
@@ -1187,25 +1332,33 @@ public class SmtpWorker implements Runnable {
         return 1;
     }
 
-    private byte messageSizeExceeded() throws IOException
+    static final int CHUNK_SIZE = 1024;
+
+    final ByteArrayOutputStream binaryDataInProgress = new ByteArrayOutputStream();
+
+    private byte consumeBinaryData(final BigInteger chunkSize) throws IOException
     {
-        logger.infof("S: %s", SmtpError.MESSAGE_TOO_BIG);
+        int remaining = chunkSize.intValue();
 
-        writeLine(os, SmtpError.MESSAGE_TOO_BIG);
-        os.flush();
+        while(remaining > 0)
+        {
+            final byte[] chunk = new byte[Math.min(remaining, CHUNK_SIZE)];
+            int reader = is.read(chunk);
+            if(reader == -1)
+            {
+                break;
+            }
 
-        return 1;
+            binaryDataInProgress.write(chunk, 0, reader);
+            remaining -= reader;
+        }
+
+        return 0;
     }
 
     private byte dataReceived(final ByteArrayOutputStream rawData) throws IOException {
         // Queuing only if this server is a relay, otherwise (final destination),
         // persist data
-        final String response = "250 2.6.0 Message accepted";
-        logger.infof("S: %s", response);
-
-        writeLine(os, response);
-        os.flush();
-
         final String hash = UUID.randomUUID().toString().replaceAll("\\-", "");
 
         final File file = new File(this.contentFolder, "mail-" + hash + ".out");
@@ -1300,4 +1453,15 @@ public class SmtpWorker implements Runnable {
             return getEmail().equals(email);
         }
     }
+
+    static final long MAX_MESSAGE_SIZE = 2 * 1024 * 1024;
+    static final int MAX_COMMAND_LENGTH = 2000;
+
+    static final Mailbox JOHN_EXAMPLE = new Mailbox("John Doe", "john.doe", "example.com");
+    static final Mailbox JANE_EXAMPLE = new Mailbox("Jane Doe", "jane.doe", "example.com");
+    static final Mailbox MAILING_LIST_EXAMPLE = new Mailbox("mailing@example.com");
+
+    static final String BODY = "BODY";
+    static final String BINARYMIME = "BINARYMIME";
+    static final String LAST = "LAST";
 }

@@ -158,4 +158,73 @@ public class SequenceTest extends BaseTest {
         }
     }
 
+    @Test
+    public void bdataTest() throws Exception
+    {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port();
+
+        try
+        {
+            Thread.sleep(start_timeout);
+        } catch(InterruptedException failure)
+        {
+            Thread.currentThread().interrupt();
+            throw new Exception(failure.getMessage());
+        }
+
+        String data = null;
+        String payload = null;
+
+        final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
+
+        try (final Socket socket = new Socket()) {
+            socket.setSoTimeout(read_timeout);
+            socket.connect(socketAddress, connect_timeout);
+
+            final InputStream in = new BufferedInputStream(socket.getInputStream());
+            final OutputStream out = new BufferedOutputStream(socket.getOutputStream());
+
+            response(in);
+
+            request(out, "EHLO alpha.net\r\n");
+            response(in);
+
+            request(out, "MAIL FROM: <alice@example.net>\r\n");
+            response(in);
+
+            request(out, "RCPT TO: <bob@example.com>\r\n");
+            response(in);
+
+            request(out, "BDAT\r\n");
+            data = response(in);
+            Assertions.assertEquals(SmtpError.SYNTAX_ERROR.toString(), data);
+
+            request(out, "RSET\r\n");
+            response(in);
+
+            request(out, "MAIL FROM: <alice@example.net> BODY=BINARYMIME\r\n");
+            response(in);
+
+            request(out, "RCPT TO: <bob@example.com>\r\n");
+            response(in);
+
+            request(out, "DATA\r\n");
+            data = response(in);
+            Assertions.assertEquals(SmtpError.INVALID_COMMAND.toString(), data);
+
+            final String header = "Subject: Test Mail\r\n\r\n";
+            payload = "BDAT " + header.length() + "\r\n" + header;
+            request(out, payload);
+            data = response(in);
+            Assertions.assertEquals(Boolean.TRUE, data.startsWith("250 2.0.0 "));
+
+            final String content = "Test Message";
+            payload = "BDAT " + content.length() + " LAST\r\n" + content;
+            request(out, payload);
+            data = response(in);
+            Assertions.assertEquals(Boolean.TRUE, data.startsWith("250 2.0.0 "));
+        }
+    }
+
 }
