@@ -56,8 +56,9 @@ public class SmtpWorker implements Runnable {
     private final List<String> whiteList = new LinkedList<>();
     private final boolean acceptAllDomains;
 
+    private boolean needAuth = false;
     private boolean isSecure = false;
-    
+
     public SmtpWorker(
         final Socket socket,
         final Mode mode,
@@ -84,6 +85,8 @@ public class SmtpWorker implements Runnable {
         this.clientHostname = remoteInetAddress.getCanonicalHostName();
 
         this.isSecure = socket instanceof SSLSocket;
+
+        this.needAuth = List.of(Mode.SUBMISSION, Mode.SECURE_SUBMISSION).contains(this.mode);
     }
 
     private String hostname;
@@ -425,7 +428,7 @@ public class SmtpWorker implements Runnable {
         responses.add("250-ENHANCEDSTATUSCODES");
         responses.add("250-PIPELINING");
 
-        if( ! Mode.SMTP.equals(this.mode) && this.isSecure )
+        if( this.needAuth && this.isSecure )
         {
             responses.add("250-AUTH LOGIN PLAIN");
             responses.add("250-AUTH=LOGIN PLAIN");
@@ -828,11 +831,6 @@ public class SmtpWorker implements Runnable {
             return introductionMissing();
         }
 
-        if(this.sender != null)
-        {
-            return senderAlreadySpecified();
-        }
-
         final String mailbox = statement.substring(10);
 
         String name = "";
@@ -858,7 +856,7 @@ public class SmtpWorker implements Runnable {
 
         final StringBuilder response = new StringBuilder();
 
-        if (Boolean.TRUE.equals(fromHost) && !authenticated) {
+        if ( (this.needAuth || Boolean.TRUE.equals(fromHost)) && !authenticated ) {
             this.fromHost = null;
             response.append(SmtpError.AUTHENTICATION_REQUIRED);
         } else {            
@@ -1098,10 +1096,7 @@ public class SmtpWorker implements Runnable {
         } else if (this.toHost == null) {
             response.append(SmtpError.DESTINATION_MISSING);
         } else {
-            if(lastChunk)
-            {
-                response.append("250 2.0.0 OK message queued");
-            } else
+            if( ! lastChunk )
             {
                 response.append("250 2.0.0 ").append(chunkSize).append(" bytes received");
             }
@@ -1110,12 +1105,15 @@ public class SmtpWorker implements Runnable {
 
         if (dataInProgress) {
             consumeBinaryData(chunkSize);
-        }
 
-        if(lastChunk)
-        {
-            dataReceived(binaryDataInProgress);
-            resetState();
+            if(lastChunk)
+            {
+                final int[] queueId = new int[1];
+                dataReceived(binaryDataInProgress, queueId);
+                resetState();
+
+                response.append("250 2.0.0 OK message queued id ").append(queueId[0]);
+            }
         }
 
         logger.infof("S: %s", response);
@@ -1170,15 +1168,6 @@ public class SmtpWorker implements Runnable {
         return 0;
     }
 
-    private byte senderAlreadySpecified() throws IOException {
-        logger.infof("S: %s", SmtpError.SENDER_ALREADY_SPECIFIED);
-
-        writeLine(os, SmtpError.SENDER_ALREADY_SPECIFIED);
-        os.flush();
-
-        return 0;
-    }
-
     private byte consumeData() throws IOException {
         final ByteArrayOutputStream data = new ByteArrayOutputStream();
 
@@ -1214,10 +1203,11 @@ public class SmtpWorker implements Runnable {
             {
                 if(safeData)
                 {
-                    dataReceived(data);
+                    final int[] queueId = new int[1];
+                    dataReceived(data, queueId);
                     resetState();
 
-                    final String response = "250 2.0.0 OK Message queued";
+                    final String response = "250 2.0.0 OK Message queued id " + queueId[0];
                     logger.infof("S: %s", response);
 
                     writeLine(os, response);
@@ -1352,12 +1342,12 @@ public class SmtpWorker implements Runnable {
         return 0;
     }
 
-    private byte dataReceived(final ByteArrayOutputStream rawData) throws IOException {
+    private byte dataReceived(final ByteArrayOutputStream rawData, final int[] queueId) throws IOException {
         // Queuing only if this server is a relay, otherwise (final destination),
         // persist data
         final String hash = UUID.randomUUID().toString().replaceAll("\\-", "");
 
-        final File file = new File(this.contentFolder, "mail-" + hash + ".out");
+        final File file = new File(this.contentFolder, "mail-" + hash + ".eml");
 
         final String receivedHeader = "Received: ";
 
@@ -1367,16 +1357,18 @@ public class SmtpWorker implements Runnable {
         received.append(this.heloHost);
         received.append(" (");
 
-        if( ! this.clientAddress.equals(this.clientHostname))
+        if( ! this.clientAddress.equals(this.clientHostname) )
         {
             received.append(this.clientHostname).append(' ');
         }
 
+        queueId[0] = ThreadLocalRandom.current().nextInt(100000, 1000000);
+
         received.append('[').append(this.clientAddress).append(']');
         received.append(')');
         received.append("\r\n").append(" ".repeat(receivedHeader.length()));
-        received.append("by ").append(this.hostname).append(" (SMTP)");
-        received.append(" with SMTP id ").append(ThreadLocalRandom.current().nextInt(100000, 1000000));
+        received.append("by ").append(this.hostname).append(" (ESMTP)");
+        received.append(" with SMTP id ").append(queueId[0]);
         received.append("\r\n").append(" ".repeat(receivedHeader.length()));
         received.append("for <").append(this.sender.getEmail()).append(">;");
         received.append("\r\n").append(" ".repeat(receivedHeader.length()));
