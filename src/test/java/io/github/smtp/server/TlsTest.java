@@ -124,7 +124,7 @@ public class TlsTest extends BaseTest {
 
             request("STARTTLS\r\n", out);
             result = response(in);
-            Assertions.assertEquals("220 2.0.0 Ready to start TLS", result, "Test#0");
+            Assertions.assertEquals("220 2.0.0 Ready to start TLS", result, "Test#00");
 
             final var sslSocket = upgrade(socket);
 
@@ -134,61 +134,65 @@ public class TlsTest extends BaseTest {
             request("EHLO alpha.net\r\n", sOut);
             response(sIn);
 
+            request("MAIL FROM:<alien@example.com>\r\n", sOut);
+            result = response(sIn);
+            Assertions.assertEquals(SmtpError.AUTHENTICATION_REQUIRED.toString(), result, "Test#01");
+
             request("AUTH LOGIN\r\n", sOut);
             result = response(sIn);
-            Assertions.assertEquals("334 VXNlcm5hbWU6", result, "Test#1");
+            Assertions.assertEquals("334 VXNlcm5hbWU6", result, "Test#02");
 
             request("*\r\n", sOut);
             result = response(sIn);
-            Assertions.assertEquals(SmtpError.AUTHENTICATION_ABORTED.toString(), result, "Test#2");
+            Assertions.assertEquals(SmtpError.AUTHENTICATION_ABORTED.toString(), result, "Test#03");
 
             request("AUTH LOGIN\r\n", sOut);
             result = response(sIn);
-            Assertions.assertEquals("334 VXNlcm5hbWU6", result, "Test#3");
+            Assertions.assertEquals("334 VXNlcm5hbWU6", result, "Test#04");
 
             request(username+"\r\n", sOut);
             result = response(sIn);
-            Assertions.assertEquals(SmtpError.CANNOT_DECODE_RESPONSE.toString(), result, "Test#4");
+            Assertions.assertEquals(SmtpError.CANNOT_DECODE_RESPONSE.toString(), result, "Test#05");
 
             request("AUTH LOGIN\r\n", sOut);
             result = response(sIn);
-            Assertions.assertEquals("334 VXNlcm5hbWU6", result, "Test#5");
+            Assertions.assertEquals("334 VXNlcm5hbWU6", result, "Test#06");
 
             sOut.write(rawUser); sOut.flush();
             result = response(sIn);
-            Assertions.assertEquals("334 UGFzc3dvcmQ6", result, "Test#6");
+            Assertions.assertEquals("334 UGFzc3dvcmQ6", result, "Test#07");
 
             request("*\r\n", sOut);
             result = response(sIn);
-            Assertions.assertEquals(SmtpError.AUTHENTICATION_ABORTED.toString(), result, "Test#7");
+            Assertions.assertEquals(SmtpError.AUTHENTICATION_ABORTED.toString(), result, "Test#08");
 
             request("AUTH LOGIN\r\n", sOut);
             result = response(sIn);
-            Assertions.assertEquals("334 VXNlcm5hbWU6", result, "Test#8");
+            Assertions.assertEquals("334 VXNlcm5hbWU6", result, "Test#09");
 
             sOut.write(rawUser); sOut.flush();
             result = response(sIn);
-            Assertions.assertEquals("334 UGFzc3dvcmQ6", result, "Test#9");
+            Assertions.assertEquals("334 UGFzc3dvcmQ6", result, "Test#10");
 
             sOut.write(rawPassw); sOut.flush();
             result = response(sIn);
-            Assertions.assertEquals(SmtpError.INVALID_CREDENTIALS.toString(), result, "Test#10");
+            Assertions.assertEquals(SmtpError.INVALID_CREDENTIALS.toString(), result, "Test#11");
 
             request("AUTH PLAIN\r\n", sOut);
             result = response(sIn);
-            Assertions.assertEquals("334 ", result, "Test#11");
+            Assertions.assertEquals("334 ", result, "Test#12");
 
             request("*\r\n", sOut);
             result = response(sIn);
-            Assertions.assertEquals(SmtpError.AUTHENTICATION_ABORTED.toString(), result, "Test#12");
+            Assertions.assertEquals(SmtpError.AUTHENTICATION_ABORTED.toString(), result, "Test#13");
 
             request("AUTH PLAIN\r\n", sOut);
             result = response(sIn);
-            Assertions.assertEquals("334 ", result, "Test#13");
+            Assertions.assertEquals("334 ", result, "Test#14");
 
             request("wrong\r\n", sOut);
             result = response(sIn);
-            Assertions.assertEquals(SmtpError.INVALID_CREDENTIALS.toString(), result, "Test#14");
+            Assertions.assertEquals(SmtpError.INVALID_CREDENTIALS.toString(), result, "Test#15");
 
             request("QUIT\r\n", sOut);
             response(sIn);
