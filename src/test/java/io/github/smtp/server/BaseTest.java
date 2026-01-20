@@ -48,9 +48,7 @@ public abstract class BaseTest {
         //     // esperado
         } finally { /***/ }
 
-        final byte[] raw = data.toByteArray();
-
-        return new String(raw, ASCII);
+        return new String(data.toByteArray(), ASCII);
     }
     
 }
