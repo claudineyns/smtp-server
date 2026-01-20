@@ -1,5 +1,7 @@
 package io.github.smtp.workers;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -158,10 +160,20 @@ public class SmtpWorker implements Runnable {
             logger.debugf("Remote peer: %s [%s]", this.clientAddress, this.clientHostname);
         }
 
-        socket.setSoTimeout(30000);
+        this.socket.setSoTimeout(30000);
 
-        is = socket.getInputStream();
-        os = socket.getOutputStream();
+        final InputStream is = socket.getInputStream();
+        final OutputStream os = socket.getOutputStream();
+
+        if(socket instanceof SSLSocket)
+        {
+            this.is = new BufferedInputStream(is);
+            this.os = new BufferedOutputStream(os);
+        } else
+        {
+            this.is = is;
+            this.os = os;
+        }
 
         startPresentation();
         interact();
@@ -195,7 +207,7 @@ public class SmtpWorker implements Runnable {
 
                 try {
                     final byte[] raw = st.toByteArray();
-                    st.reset();;
+                    st.reset();
                     checkStatement(raw);
                 } catch (IOException e) {
                     break;
@@ -496,8 +508,8 @@ public class SmtpWorker implements Runnable {
         sslSocket.startHandshake();
 
         this.socket = sslSocket;
-        this.is = sslSocket.getInputStream();
-        this.os = sslSocket.getOutputStream();
+        this.is = new BufferedInputStream(sslSocket.getInputStream());
+        this.os = new BufferedOutputStream(sslSocket.getOutputStream());
 
         this.isSecure = true;
 
