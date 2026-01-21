@@ -30,15 +30,16 @@ import javax.net.ssl.SSLSocketFactory;
 
 import org.jboss.logging.Logger;
 
+import io.github.smtp.application.Mode;
 import io.github.smtp.protocol.SmtpError;
-import io.github.smtp.server.Mode;
+import io.github.smtp.server.ServerMode;
 
 import static io.github.smtp.utils.AppUtils.*;
 
 public class SmtpWorker implements Runnable {
     private final Logger logger = Logger.getLogger(getClass());
 
-    private final Mode mode;
+    private final ServerMode serverMode;
 
     @SuppressWarnings("unused")
     private final UUID sessionId;
@@ -63,14 +64,14 @@ public class SmtpWorker implements Runnable {
 
     public SmtpWorker(
         final Socket socket,
-        final Mode mode,
+        final ServerMode serverMode,
         final String serverAddress,
         final UUID id,
         final List<String> whiteList
     )
     {
         this.socket = socket;
-        this.mode = mode;
+        this.serverMode = serverMode;
         this.serverAddress = serverAddress;
         this.sessionId = id;
         this.whiteList.addAll(whiteList);
@@ -88,8 +89,10 @@ public class SmtpWorker implements Runnable {
 
         this.isSecure = socket instanceof SSLSocket;
 
-        this.needAuth = List.of(Mode.SUBMISSION, Mode.SECURE_SUBMISSION).contains(this.mode);
+        this.needAuth = List.of(ServerMode.SUBMISSION, ServerMode.SECURE_SUBMISSION).contains(this.serverMode);
     }
+
+    private Mode mode;
 
     private String hostname;
     public SmtpWorker setHostname(final String hostname)
@@ -122,7 +125,7 @@ public class SmtpWorker implements Runnable {
             process();
         } catch (IOException failure) {
             logger.warnf("[%s] (processRequest) <%s> %s",
-                this.mode.name(),
+                this.serverMode.name(),
                 failure.getClass().getName(),
                 failure.getMessage());
         } finally {
@@ -254,9 +257,19 @@ public class SmtpWorker implements Runnable {
             return rset();
         }
 
+        if("HELO".equalsIgnoreCase(statement))
+        {
+            return syntaxError();
+        }
+
         if ( matchesStart(statement, "HELO ") )
         {
             return helo(statement);
+        }
+
+        if("EHLO".equalsIgnoreCase(statement))
+        {
+            return ehlo(null);
         }
 
         if ( matchesStart(statement, "EHLO ") )
@@ -289,7 +302,7 @@ public class SmtpWorker implements Runnable {
             return expand(statement);
         }
 
-        if( ! Mode.SMTP.equals(this.mode))
+        if( ! ServerMode.SMTP.equals(this.serverMode))
         {
             if ("AUTH LOGIN".equalsIgnoreCase(statement))
             {
@@ -427,11 +440,15 @@ public class SmtpWorker implements Runnable {
         os.flush();
 
         return 0;
-    }   
+    }
 
     private byte ehlo(final String statement) throws IOException
     {
-        this.heloHost = statement.substring(5);
+        final String heloHost = this.clientAddress.equals(this.clientHostname)
+            ? String.format("[%s]", this.clientAddress)
+            : this.clientHostname;
+
+        this.heloHost = statement != null ? statement.substring(5) : heloHost;
 
         final List<String> responses = new ArrayList<>();
 
@@ -446,7 +463,7 @@ public class SmtpWorker implements Runnable {
             responses.add("250-AUTH=LOGIN PLAIN");
         }
 
-        if( ! Mode.SECURE_SUBMISSION.equals(this.mode) && ! this.isSecure )
+        if( ! ServerMode.SECURE_SUBMISSION.equals(this.serverMode) && ! this.isSecure )
         {
             responses.add("250-STARTTLS");
         }
@@ -675,10 +692,16 @@ public class SmtpWorker implements Runnable {
         this.password = new String(rawpass, StandardCharsets.US_ASCII);
         logger.info("C: Password: " + this.password);
 
-        if (LOCAL_USERNAME.equals(this.username) && LOCAL_PASSWORD.equals(this.password)) {
+        if(Mode.RELAXED.equals(this.mode))
+        {
             this.authenticated = true;
-            response.append("235 2.7.0 Authentication Succeeded");
-        } else {
+            response.append(AUTENTHICATION_SUCEEDED);
+        } else if (LOCAL_USERNAME.equals(this.username) && LOCAL_PASSWORD.equals(this.password))
+        {
+            this.authenticated = true;
+            response.append(AUTENTHICATION_SUCEEDED);
+        } else
+        {
             this.username = null;
             this.password = null;
             response.append(SmtpError.INVALID_CREDENTIALS);
@@ -739,6 +762,8 @@ public class SmtpWorker implements Runnable {
         os.flush();
 
         final String credential = getContent();
+        logger.infof("C: %s", credential);
+
         return authPlainValidation(credential);
     }
 
@@ -754,14 +779,11 @@ public class SmtpWorker implements Runnable {
         if (credential.trim().isEmpty()) {
             response.append(SmtpError.INVALID_CREDENTIALS);
         } else {
-            final byte[] source = asciiraw("\0" + LOCAL_USERNAME + "\0" + LOCAL_PASSWORD);
-            final String validCredential = Base64.getEncoder().encodeToString(source);
-            if (validCredential.equals(credential)) {
-                this.authenticated = true;
-                response.append("235 2.7.0 Authentication Succeeded");
-            } else {
-                response.append(SmtpError.INVALID_CREDENTIALS);
-            }
+            checkEncodedCredential(credential);
+            response.append(this.authenticated
+                ? AUTENTHICATION_SUCEEDED
+                : SmtpError.INVALID_CREDENTIALS.toString()
+            );
         }
 
         logger.infof("S: %s", response);
@@ -770,6 +792,40 @@ public class SmtpWorker implements Runnable {
         os.flush();
 
         return 0;
+    }
+
+    private void checkEncodedCredential(final String credential)
+    {
+        String decodedCredential;
+        try
+        {
+            decodedCredential = new String(
+                Base64.getDecoder().decode(credential),
+                StandardCharsets.US_ASCII);
+        } catch(IllegalArgumentException failure)
+        {
+            decodedCredential = "";
+        }
+
+        final String[] credentialParts = decodedCredential.split("\0");
+        if(credentialParts.length != 3)
+        {
+            return;
+        }
+
+        if (LOCAL_USERNAME.equals(credentialParts[1]) && LOCAL_PASSWORD.equals(credentialParts[2]))
+        {
+            this.username = credentialParts[1];
+            this.password = credentialParts[2];
+            this.authenticated = true;
+
+        } else if (Mode.RELAXED.equals(this.mode))
+        {
+            this.username = credentialParts[1];
+            this.password = credentialParts[2];
+            this.authenticated = true;
+
+        }
     }
 
     private byte verify(final String statement) throws IOException {
@@ -1050,7 +1106,11 @@ public class SmtpWorker implements Runnable {
             response.append(SmtpError.DESTINATION_MISSING);
         } else {
             dataInProgress = true;
-            response.append("354 I am ready, send 8BITMIME message, ending in <CRLF>.<CRLF>");
+            final Object bodyMime = this.mailParams.get(BODY);
+            response
+                .append("354 I am ready, send ")
+                .append(bodyMime != null ? bodyMime + " " : "")
+                .append("message, ending in <CRLF>.<CRLF>");
         }
 
         logger.infof("S: %s", response);
@@ -1464,4 +1524,6 @@ public class SmtpWorker implements Runnable {
     static final String BODY = "BODY";
     static final String BINARYMIME = "BINARYMIME";
     static final String LAST = "LAST";
+
+    static final String AUTENTHICATION_SUCEEDED = "235 2.7.0 Authentication Succeeded";
 }

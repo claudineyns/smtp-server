@@ -6,6 +6,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -55,7 +56,7 @@ public class MailTest extends BaseTest {
     static final int read_timeout = 250;
 
     @Test
-    public void verifyMailboxSuccess() throws Exception {
+    public void verifyMailboxSuccessTest() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
         final Integer port = configs.server().port();
 
@@ -103,7 +104,7 @@ public class MailTest extends BaseTest {
     }
 
     @Test
-    public void expandMailboxSuccess() throws Exception {
+    public void expandMailboxSuccessTest() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
         final Integer port = configs.server().port();
 
@@ -148,7 +149,7 @@ public class MailTest extends BaseTest {
     }
 
     @Test
-    public void blacklistSuccess() throws Exception {
+    public void blacklistSuccessTest() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
         final Integer port = configs.server().port();
 
@@ -187,7 +188,7 @@ public class MailTest extends BaseTest {
     }
 
     @Test
-    public void nullSenderSuccess() throws Exception {
+    public void nullSenderSuccessTest() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
         final Integer port = configs.server().port();
 
@@ -226,7 +227,7 @@ public class MailTest extends BaseTest {
     }
 
     @Test
-    public void invalidClientHostSuccess() throws Exception {
+    public void invalidClientHostSuccessTest() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
         final Integer port = configs.server().port();
 
@@ -259,7 +260,7 @@ public class MailTest extends BaseTest {
     }
 
     @Test
-    public void destinationMailboxSuccess() throws Exception {
+    public void destinationMailboxSuccessTest() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
         final Integer port = configs.server().port();
 
@@ -298,7 +299,7 @@ public class MailTest extends BaseTest {
     }
 
     @Test
-    public void sendDataIncompleteMailboxesSuccess() throws Exception {
+    public void sendDataIncompleteMailboxesSuccessTest() throws Exception {
         final String hostname = configs.server().hostname().orElse("localhost");
         final Integer port = configs.server().port();
 
@@ -345,6 +346,42 @@ public class MailTest extends BaseTest {
 
             request("DATA\r\n", out);
             response(in);
+
+            request("QUIT\r\n", out);
+            response(in);
+        }
+    }
+
+    @Test
+    public void emptyEhloTest() throws Exception {
+        final String hostname = configs.server().hostname().orElse("localhost");
+        final Integer port = configs.server().port();
+
+        try
+        {
+            Thread.sleep(startup_timeout);
+        } catch(InterruptedException failure)
+        {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(failure);
+        }
+
+        final InetSocketAddress socketAddress = new InetSocketAddress(hostname, port);
+
+        String data = null;
+
+        try (final Socket socket = new Socket()) {
+            socket.setSoTimeout(read_timeout);
+            socket.connect(socketAddress, connect_timeout);
+
+            final InputStream in = socket.getInputStream();
+            final OutputStream out = socket.getOutputStream();
+
+            response(in);
+
+            request("EHLO\r\n", out);
+            data = response(in);
+            Assertions.assertEquals(Boolean.TRUE, data.startsWith("250"));
 
             request("QUIT\r\n", out);
             response(in);
