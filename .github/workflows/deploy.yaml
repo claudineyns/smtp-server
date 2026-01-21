@@ -9,17 +9,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout local (opcional, apenas se precisar de arquivos no runner)
-      uses: actions/checkout@v4
-
-    - name: Executar comandos no servidor remoto
+    - name: Deploy no servidor remoto
       uses: appleboy/ssh-action@v1.0.3
       env:
         # Mapeia o Secret do GitHub para uma variável de ambiente local
-        MY_TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
-        MY_USER: "claudineyns"
+        TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
         BRANCH: "main"
-        REPO_URL: "github.com/claudineyns/smtp-server.git"
+        REPO_URL: ${{ github.repository }}
         FOLDER: "smtp-build"
         SOURCE: "smtp-build/source"
       with:
@@ -27,9 +23,9 @@ jobs:
         username: ${{ secrets.USERNAME }}
         key: ${{ secrets.SSH_KEY }}
         port: 50022
-        envs: MY_TOKEN,MY_USER,BRANCH,REPO_URL,FOLDER,SOURCE
+        envs: TOKEN,BRANCH,REPO_URL,FOLDER,SOURCE
         script: |
-          AUTH_URL="https://$MY_USER:$MY_TOKEN@$REPO_URL"
+          AUTH_URL="https://x-access-token:$TOKEN@github.com/$REPO_URL"
           rm -fr $SOURCE \
            && mkdir -p $SOURCE \
            && git clone -b $BRANCH $AUTH_URL $SOURCE \
