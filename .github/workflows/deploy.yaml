@@ -13,7 +13,7 @@ jobs:
       uses: appleboy/ssh-action@v1.0.3
       env:
         # Mapeia o Secret do GitHub para uma variável de ambiente local
-        MY_TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
+        TOKEN: ${{ secrets.GIT_ACCESS_TOKEN }}
         BRANCH: "main"
         REPO_URL: ${{ github.repository }}
         FOLDER: "smtp-build"
@@ -23,9 +23,9 @@ jobs:
         username: ${{ secrets.USERNAME }}
         key: ${{ secrets.SSH_KEY }}
         port: 50022
-        envs: MY_TOKEN,BRANCH,REPO_URL,FOLDER,SOURCE
+        envs: TOKEN,BRANCH,REPO_URL,FOLDER,SOURCE
         script: |
-          AUTH_URL="https://x-access-token:$MY_TOKEN@github.com/$REPO_URL"
+          AUTH_URL="https://x-access-token:$TOKEN@github.com/$REPO_URL"
           rm -fr $SOURCE \
            && mkdir -p $SOURCE \
            && git clone -b $BRANCH $AUTH_URL $SOURCE \
