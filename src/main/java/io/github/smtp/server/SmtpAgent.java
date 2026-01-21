@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.security.KeyStore;
 import org.jboss.logging.Logger;
 
+import io.github.smtp.application.Mode;
 import io.github.smtp.configs.Configs;
 import io.github.smtp.configs.SslConfigs;
 import io.github.smtp.configs.SubmissionConfigs;
@@ -173,6 +174,11 @@ public class SmtpAgent {
 		return configs.contentFolder().orElseGet(() -> System.getProperty("java.io.tmpdir"));
 	}
 
+	private Mode getMode()
+	{
+		return configs.mode();
+	}
+
 	static final Integer DEFAULT_SMTP_PORT = 25;
 
 	private String serviceHost;
@@ -288,6 +294,7 @@ public class SmtpAgent {
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
+					.setMode(getMode())
 			);
 		}
 
@@ -314,6 +321,7 @@ public class SmtpAgent {
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
+					.setMode(getMode())
 			);
 		}
 
@@ -340,6 +348,7 @@ public class SmtpAgent {
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
+					.setMode(getMode())
 			);
 		}
 
