@@ -23,6 +23,7 @@ public enum SmtpError {
     TLS_ALREADY_ACTIVE("503", "5.5.1", "TLS already active"),
     CANNOT_DECODE_RESPONSE("501", "5.5.2", "Cannot decode response"),
     AUTHENTICATION_ABORTED("501", "5.7.0", "Authentication aborted"),
+    RELAY_FORBIDDEN("551", "5.7.1", "Relaying forbidden"),
     ;
 
     private String code;
