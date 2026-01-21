@@ -30,6 +30,6 @@ jobs:
           rm -fr $SOURCE \
            && mkdir -p $SOURCE \
            && git clone -b $BRANCH $AUTH_URL $SOURCE \
-           && mvn test -s $SOURCE/settings.xml \
+           && mvn test -f $SOURCE/pom.xml -s $SOURCE/settings.xml \
            && rm -fr $SOURCE \
            && echo 'Test completed'
