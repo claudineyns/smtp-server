@@ -7,6 +7,7 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
     - name: Teste no servidor remoto
@@ -29,6 +30,11 @@ jobs:
           rm -fr $SOURCE \
            && mkdir -p $SOURCE \
            && git clone -b $BRANCH $AUTH_URL $SOURCE \
-           && mvn test -f $SOURCE/pom.xml -s $SOURCE/settings.xml \
+           && podman run --rm \
+             -v "$(pwd)/$SOURCE:/app:Z" \
+             -v "$HOME/.m2:/root/.m2:Z" \
+             -w /app \
+             docker.io/library/maven:3.9.6-eclipse-temurin-21 \
+             mvn test -s settings.xml
            && rm -fr $SOURCE \
            && echo 'Test completed'
