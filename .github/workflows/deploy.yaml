@@ -9,10 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout local (opcional, apenas se precisar de arquivos no runner)
-      uses: actions/checkout@v4
-
-    - name: Executar comandos no servidor remoto
+    - name: Compilação no servidor remoto
       uses: appleboy/ssh-action@v1.0.3
       env:
         # Mapeia o Secret do GitHub para uma variável de ambiente local
