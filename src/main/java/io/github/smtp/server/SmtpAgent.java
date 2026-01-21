@@ -51,6 +51,7 @@ public class SmtpAgent {
 
 	public void start()
 	{
+		logger.infof("application.mode = %s", configs.mode() );
 		logger.infof("application.content-folder = %s", fetchContentFolder() );
 		logger.infof("application.server.hostname = %s", fetchServiceHost() );
 		configs.server().fqdnWhitelist().ifPresent(l -> logger.infof("application.server.fqdn-whitelist = %s", l));
@@ -283,7 +284,7 @@ public class SmtpAgent {
 			logger.trace("--- [SMTP] got new connection ---");
 
 			this.threads.submit(
-				new SmtpWorker(client, Mode.SMTP, this.serviceAddress, UUID.randomUUID(), whitelist)
+				new SmtpWorker(client, ServerMode.SMTP, this.serviceAddress, UUID.randomUUID(), whitelist)
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
@@ -309,7 +310,7 @@ public class SmtpAgent {
 			logger.trace("--- [Submission] got new connection ---");
 
 			this.threads.submit(
-				new SmtpWorker(client, Mode.SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
+				new SmtpWorker(client, ServerMode.SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
@@ -335,7 +336,7 @@ public class SmtpAgent {
 			logger.trace("--- [SSL Submission] got new connection ---");
 
 			this.threads.submit(
-				new SmtpWorker(client, Mode.SECURE_SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
+				new SmtpWorker(client, ServerMode.SECURE_SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
 					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
