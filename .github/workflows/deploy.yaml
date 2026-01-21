@@ -33,7 +33,7 @@ jobs:
           rm -fr $SOURCE \
            && mkdir -p $SOURCE \
            && git clone -b $BRANCH $AUTH_URL $SOURCE \
-           && mvn install -Dnative -f $SOURCE/pom.xml -s $SOURCE/settings.xml \
+           && mvn install -DskipTests -Dnative -f $SOURCE/pom.xml -s $SOURCE/settings.xml \
            && cp $SOURCE/target/smtp*-runner.jar $FOLDER \
            && cp $SOURCE/target/smtp*-runner $FOLDER \
            && rm -fr $SOURCE \
