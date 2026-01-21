@@ -93,6 +93,10 @@ public class SmtpWorker implements Runnable {
     }
 
     private Mode mode;
+    public SmtpWorker setMode(Mode mode) {
+        this.mode = mode;
+        return this;
+    }
 
     private String hostname;
     public SmtpWorker setHostname(final String hostname)
