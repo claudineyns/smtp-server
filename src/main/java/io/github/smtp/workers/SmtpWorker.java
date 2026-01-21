@@ -1044,9 +1044,9 @@ public class SmtpWorker implements Runnable {
 
         if (this.sender == null) {
             responses.add(SmtpError.SENDER_MISSING.toString());
-        } else if (Boolean.FALSE.equals(fromHost) && Boolean.FALSE.equals(toHost)) {
+        } else if ( Boolean.FALSE.equals(fromHost) && Boolean.FALSE.equals(toHost) && ! this.authenticated ) {
             toHost = null;
-            responses.add("551 5.7.1 Relaying forbidden");
+            responses.add(SmtpError.RELAY_FORBIDDEN.toString());
         } else {
             this.recipients.add(recipient);
             responses.add(String.format("250 2.1.0 <%s>: Recipient OK", recipient.getEmail()));
