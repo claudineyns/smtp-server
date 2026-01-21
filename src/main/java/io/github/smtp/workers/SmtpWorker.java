@@ -495,6 +495,10 @@ public class SmtpWorker implements Runnable {
 
     private byte startTls() throws IOException
     {
+        if(this.heloHost == null) {
+            return introductionMissing();
+        }
+
         final String message = this.isSecure 
             ? SmtpError.TLS_ALREADY_ACTIVE.toString()
             : "220 2.0.0 Ready to start TLS";
