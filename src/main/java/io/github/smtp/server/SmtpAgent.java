@@ -19,12 +19,15 @@ import io.github.smtp.configs.Configs;
 import io.github.smtp.configs.SslConfigs;
 import io.github.smtp.configs.SubmissionConfigs;
 import io.github.smtp.configs.UtilConfigs;
-import io.github.smtp.utils.AppUtils;
 import io.github.smtp.workers.SmtpWorker;
+
+import static io.github.smtp.utils.AppUtils.listOf;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -54,6 +57,7 @@ public class SmtpAgent {
 	{
 		logger.infof("application.mode = %s", configs.mode() );
 		logger.infof("application.content-folder = %s", fetchContentFolder() );
+		configs.forbiddenHostWords().ifPresent(l -> logger.infof("application.forbidden-host-words = %s", l));
 		logger.infof("application.server.hostname = %s", fetchServiceHost() );
 		configs.server().fqdnWhitelist().ifPresent(l -> logger.infof("application.server.fqdn-whitelist = %s", l));
 		logger.infof("application.server.port = %s", getPort() );
@@ -179,6 +183,16 @@ public class SmtpAgent {
 		return configs.mode();
 	}
 
+	private List<String> fetchForbiddenHostWords()
+	{
+		return listOf(configs.forbiddenHostWords()).orElseGet(List::of);
+	}
+
+	private Optional<String> fetchForbiddenHostMessage()
+	{
+		return configs.forbiddenHostMessage();
+	}
+
 	static final Integer DEFAULT_SMTP_PORT = 25;
 
 	private String serviceHost;
@@ -201,8 +215,7 @@ public class SmtpAgent {
 	private void mountServers() throws Exception {
         this.serviceHost = fetchServiceHost();
 
-		this.whitelist = AppUtils
-			.listOf(configs.server().fqdnWhitelist())
+		this.whitelist = listOf(configs.server().fqdnWhitelist())
 			.orElseGet(()-> List.of("localhost"));
 
 		this.contentFolder = fetchContentFolder();
@@ -263,7 +276,7 @@ public class SmtpAgent {
 
         final var params = this.sslServer.getSSLParameters();
 
-        params.setApplicationProtocols(new String[] {"http/1.1"});
+        params.setApplicationProtocols(new String[] {"smtp"});
         params.setProtocols(new String[] {"TLSv1.2", "TLSv1.3"});
         params.setUseCipherSuitesOrder(true);
 
@@ -295,6 +308,7 @@ public class SmtpAgent {
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
 					.setMode(getMode())
+					.setForbiddenHostConfig(fetchForbiddenHostWords(), fetchForbiddenHostMessage())
 			);
 		}
 
@@ -322,6 +336,7 @@ public class SmtpAgent {
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
 					.setMode(getMode())
+					.setForbiddenHostConfig(fetchForbiddenHostWords(), fetchForbiddenHostMessage())
 			);
 		}
 
@@ -349,6 +364,7 @@ public class SmtpAgent {
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
 					.setMode(getMode())
+					.setForbiddenHostConfig(fetchForbiddenHostWords(), fetchForbiddenHostMessage())
 			);
 		}
 
