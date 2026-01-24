@@ -17,6 +17,10 @@ public interface Configs
 
     Optional<String> contentFolder();
 
+    Optional<String> forbiddenHostWords();
+
+    Optional<String> forbiddenHostMessage();
+
     interface Server
     {
         Integer port();

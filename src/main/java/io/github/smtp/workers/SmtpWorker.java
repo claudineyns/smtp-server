@@ -82,11 +82,6 @@ public class SmtpWorker implements Runnable {
             .now(ZoneId.systemDefault())
             .format(DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US));
 
-        final var remoteInetAddress = socket.getInetAddress();
-
-        this.clientAddress = remoteInetAddress.getHostAddress();
-        this.clientHostname = remoteInetAddress.getCanonicalHostName();
-
         this.isSecure = socket instanceof SSLSocket;
 
         this.needAuth = List.of(ServerMode.SUBMISSION, ServerMode.SECURE_SUBMISSION).contains(this.serverMode);
@@ -109,6 +104,18 @@ public class SmtpWorker implements Runnable {
     public SmtpWorker setContentFolder(final String contentFolder)
     {
         this.contentFolder = contentFolder;
+        return this;
+    }
+
+    private List<String> forbiddenHostWords = new ArrayList<>();
+    private Optional<String> forbiddenHostMessage = Optional.empty();
+    public SmtpWorker setForbiddenHostConfig(final List<String> words, final Optional<String> message)
+    {
+        forbiddenHostWords.clear();
+        forbiddenHostWords.addAll(words);
+
+        forbiddenHostMessage = message;
+
         return this;
     }
 
@@ -159,6 +166,11 @@ public class SmtpWorker implements Runnable {
 
     int commandLength = 0;
     private void process() throws IOException {
+        final var remoteInetAddress = socket.getInetAddress();
+
+        this.clientAddress = remoteInetAddress.getHostAddress();
+        this.clientHostname = remoteInetAddress.getCanonicalHostName();
+
         if(this.clientAddress.equals(this.clientHostname))
         {
             logger.debugf("Remote peer: %s", this.clientAddress);
@@ -187,11 +199,22 @@ public class SmtpWorker implements Runnable {
     }
 
     private byte startPresentation() throws IOException {
-        final String presentation = "220 " + this.hostname + " ESMTP Ready";
+        final boolean forbiddenHost = this.forbiddenHostWords.stream()
+            .filter(this.clientHostname::contains)
+            .count() > 0;
+
+        final String presentation = forbiddenHost
+            ? String.format("521 %s", forbiddenHostMessage.orElse("Server does not accept mail from you"))
+            : String.format("220 %s ESMTP Ready", this.hostname);
         logger.infof("S: %s", presentation);
 
         writeLine(os, presentation);
         os.flush();
+
+        if(forbiddenHost)
+        {
+            throw new IOException(String.format("Host <<%s>> not allowed", this.clientHostname));
+        }
 
         return 0;
     }
@@ -523,9 +546,10 @@ public class SmtpWorker implements Runnable {
             );
 
         final SSLParameters params = sslSocket.getSSLParameters();
+        params.setApplicationProtocols(new String[] {"smtp"});
+        params.setProtocols(new String[] {"TLSv1.2", "TLSv1.3"});
         params.setUseCipherSuitesOrder(true);
 
-        sslSocket.setEnabledProtocols(new String[] { "TLSv1.2", "TLSv1.3" });
         sslSocket.setSSLParameters(params);
 
         sslSocket.setUseClientMode(false);
