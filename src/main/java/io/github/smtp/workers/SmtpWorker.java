@@ -126,6 +126,13 @@ public class SmtpWorker implements Runnable {
         return this;
     }
 
+    private Map<String, String> addressHostCache;
+    public SmtpWorker setAddressHostCache(final Map<String, String> addressHostCache)
+    {
+        this.addressHostCache = addressHostCache;
+        return this;
+    }
+
     public void run()
     {
         processRequest();
@@ -167,9 +174,11 @@ public class SmtpWorker implements Runnable {
     int commandLength = 0;
     private void process() throws IOException {
         final var remoteInetAddress = socket.getInetAddress();
+        final String clientAddress = remoteInetAddress.getHostAddress();
 
-        this.clientAddress = remoteInetAddress.getHostAddress();
-        this.clientHostname = remoteInetAddress.getCanonicalHostName();
+        this.clientAddress = clientAddress;
+        this.clientHostname = addressHostCache
+            .computeIfAbsent(clientAddress, k -> remoteInetAddress.getCanonicalHostName());
 
         if(this.clientAddress.equals(this.clientHostname))
         {
