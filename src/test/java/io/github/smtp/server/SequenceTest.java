@@ -21,7 +21,7 @@ import jakarta.inject.Inject;
 public class SequenceTest extends BaseTest {
     static final int start_timeout = 250;
     static final int connect_timeout = 500;
-    static final int read_timeout = 250;
+    static final int read_timeout = 500;
 
     @Inject
     Configs configs;

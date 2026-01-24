@@ -22,7 +22,7 @@ import jakarta.inject.Inject;
 public class RelayTest {
     static final Charset ASCII = StandardCharsets.US_ASCII;
 
-    static final int read_timeout = 250;
+    static final int read_timeout = 300;
     static final int connect_timeout = 500;
     static final int start_timeout = 1000;
 

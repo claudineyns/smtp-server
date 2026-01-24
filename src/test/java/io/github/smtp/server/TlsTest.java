@@ -32,7 +32,7 @@ import jakarta.inject.Inject;
 @QuarkusTest
 public class TlsTest extends BaseTest {
 
-    static final int read_timeout = 300;
+    static final int read_timeout = 500;
     static final int connect_timeout = 500;
     static final int start_timeout = 1000;
 

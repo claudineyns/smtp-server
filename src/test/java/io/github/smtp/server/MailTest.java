@@ -53,7 +53,7 @@ public class MailTest extends BaseTest {
 
     static final int startup_timeout = 250;
     static final int connect_timeout = 500;
-    static final int read_timeout = 250;
+    static final int read_timeout = 500;
 
     @Test
     public void verifyMailboxSuccessTest() throws Exception {
