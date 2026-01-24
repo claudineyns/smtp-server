@@ -26,7 +26,10 @@ import static io.github.smtp.utils.AppUtils.listOf;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -52,6 +55,15 @@ public class SmtpAgent {
 
 	@Inject
 	SubmissionConfigs submissionConfigs;
+
+    private final Map<String, String> addressHostCache = Collections.synchronizedMap(
+        new LinkedHashMap<String, String>(1024, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+                return size() > 1000;
+            }
+        }
+    );
 
 	public void start()
 	{
@@ -309,6 +321,7 @@ public class SmtpAgent {
 					.setSslSocketFactory(this.sslSocketFactory)
 					.setMode(getMode())
 					.setForbiddenHostConfig(fetchForbiddenHostWords(), fetchForbiddenHostMessage())
+					.setAddressHostCache(addressHostCache)
 			);
 		}
 
@@ -337,6 +350,7 @@ public class SmtpAgent {
 					.setSslSocketFactory(this.sslSocketFactory)
 					.setMode(getMode())
 					.setForbiddenHostConfig(fetchForbiddenHostWords(), fetchForbiddenHostMessage())
+					.setAddressHostCache(addressHostCache)
 			);
 		}
 
@@ -365,6 +379,7 @@ public class SmtpAgent {
 					.setSslSocketFactory(this.sslSocketFactory)
 					.setMode(getMode())
 					.setForbiddenHostConfig(fetchForbiddenHostWords(), fetchForbiddenHostMessage())
+					.setAddressHostCache(addressHostCache)
 			);
 		}
 
