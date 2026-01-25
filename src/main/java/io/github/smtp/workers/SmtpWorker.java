@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+
+import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -141,6 +143,8 @@ public class SmtpWorker implements Runnable {
     private void processRequest() {
         try {
             process();
+        } catch (SSLException failure) {
+            // ignore
         } catch (IOException failure) {
             logger.warnf("[%s] (processRequest) <%s> %s",
                 this.serverMode.name(),
@@ -190,17 +194,16 @@ public class SmtpWorker implements Runnable {
 
         this.socket.setSoTimeout(30000);
 
-        final InputStream is = socket.getInputStream();
-        final OutputStream os = socket.getOutputStream();
-
-        if(socket instanceof SSLSocket)
+        if(socket instanceof SSLSocket sslSocket)
         {
-            this.is = new BufferedInputStream(is);
-            this.os = new BufferedOutputStream(os);
+            sslSocket.startHandshake();
+
+            this.is = new BufferedInputStream(sslSocket.getInputStream());
+            this.os = new BufferedOutputStream(sslSocket.getOutputStream());
         } else
         {
-            this.is = is;
-            this.os = os;
+            this.is = socket.getInputStream();
+            this.os = socket.getOutputStream();
         }
 
         startPresentation();
@@ -556,7 +559,7 @@ public class SmtpWorker implements Runnable {
 
         final SSLParameters params = sslSocket.getSSLParameters();
         params.setApplicationProtocols(new String[] {"smtp"});
-        params.setProtocols(new String[] {"TLSv1.2", "TLSv1.3"});
+        params.setProtocols(new String[] {"TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"});
         params.setUseCipherSuitesOrder(true);
 
         sslSocket.setSSLParameters(params);
