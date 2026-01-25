@@ -289,7 +289,7 @@ public class SmtpAgent {
         final var params = this.sslServer.getSSLParameters();
 
         params.setApplicationProtocols(new String[] {"smtp"});
-        params.setProtocols(new String[] {"TLSv1.2", "TLSv1.3"});
+        params.setProtocols(new String[] {"TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"});
         params.setUseCipherSuitesOrder(true);
 
         this.sslServer.setSSLParameters(params);
