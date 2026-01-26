@@ -11,9 +11,12 @@ import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -1459,17 +1462,26 @@ public class SmtpWorker implements Runnable {
     }
 
     private byte dataReceived(final ByteArrayOutputStream rawData, final int[] queueId) throws IOException {
-        // Queuing only if this server is a relay, otherwise (final destination),
-        // persist data
-        final String hash = UUID.randomUUID().toString().replaceAll("\\-", "");
+        // Queuing only if this server is a relay, otherwise (final destination), persist data
 
-        final File file = new File(this.contentFolder, "mail-" + hash + ".eml");
+        final var currentTime = LocalDateTime.now();
 
-        final String receivedHeader = "Received: ";
+        final long seconds = currentTime.atZone(ZoneOffset.UTC).toInstant().getEpochSecond();
+        final long nano = currentTime.get(ChronoField.NANO_OF_SECOND);
+        final int random = ThreadLocalRandom.current().nextInt(10000);
+
+        // Formato: 1700000000.N2837462.R1234.meuserver.com
+        final String hash = String.format("%d.N%d.R%04d.%s", seconds, nano, random, "recipient-domain");
+
+        queueId[0] = ThreadLocalRandom.current().nextInt(100000, 1000000);
+
+        final File file = new File(this.contentFolder, hash + ".eml");
+
+        final String receivedHeader = "Received";
 
         final StringBuilder received = new StringBuilder();
         received.append(receivedHeader);
-        received.append("from: ");
+        received.append(": from: ");
         received.append(this.heloHost);
         received.append(" (");
 
@@ -1478,17 +1490,24 @@ public class SmtpWorker implements Runnable {
             received.append(this.clientHostname).append(' ');
         }
 
-        queueId[0] = ThreadLocalRandom.current().nextInt(100000, 1000000);
-
-        received.append('[').append(this.clientAddress).append(']');
-        received.append(')');
+        received.append('[').append(this.clientAddress).append(']').append(')');
         received.append("\r\n").append(" ".repeat(receivedHeader.length()));
-        received.append("by ").append(this.hostname).append(" (ESMTP)");
-        received.append(" with SMTP id ").append(queueId[0]);
+        received.append("by ").append(this.hostname).append(" (Smtp Service)");
+        received.append(" with ESMTP");
+        if( ! ServerMode.SMTP.equals(serverMode) )
+        {
+            received.append("S");
+            if(this.authenticated)
+            {
+                received.append("A");
+            }
+        }
+
+        received.append(" id ").append(queueId[0]);
         received.append("\r\n").append(" ".repeat(receivedHeader.length()));
         received.append("for <").append(this.sender.getEmail()).append(">;");
-        received.append("\r\n").append(" ".repeat(receivedHeader.length()));
-        received.append(this.timestamp).append("\r\n");
+        received.append(" ").append(this.timestamp);
+        received.append("\r\n");
 
         final byte[] receivedFrom = asciiraw(received);
 
@@ -1498,7 +1517,7 @@ public class SmtpWorker implements Runnable {
             outData.flush();
         } catch (IOException e) { /***/ }
 
-        logger.infof("--- Data hash: %s ---", hash);
+        logger.debugf("--- Data hash: %s ---", hash);
 
         return 0;
     }
