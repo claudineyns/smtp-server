@@ -1,4 +1,4 @@
-package io.github.smtp.server;
+package io.github.smtp.server.test;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import io.github.smtp.configs.Configs;
 import io.github.smtp.configs.SubmissionConfigs;
 import io.github.smtp.protocol.SmtpError;
+import io.github.smtp.server.SmtpAgent;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 
@@ -207,7 +208,7 @@ public class TlsTest extends BaseTest {
             new KeyManager[] {},
             new TrustManager[] {
                 new X509TrustManager() {
-                    public void checkClientTrusted(X509Certificate[] arg0, String arg1)
+                    public void checkClientTrusted(X509Certificate[] chain, String authType)
                         throws CertificateException {
                         // OK
                     }

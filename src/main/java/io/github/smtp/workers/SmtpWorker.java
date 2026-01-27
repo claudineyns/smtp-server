@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
+import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -51,7 +52,7 @@ public class SmtpWorker implements Runnable {
     private String clientAddress;
 
     @SuppressWarnings("unused")
-    private String serverAddress;
+    private InetAddress serverAddress;
 
     private final List<String> whiteList = new LinkedList<>();
     private final boolean acceptAllDomains;
@@ -62,7 +63,7 @@ public class SmtpWorker implements Runnable {
     public SmtpWorker(
         final Socket socket,
         final ServerMode serverMode,
-        final String serverAddress,
+        final InetAddress serverAddress,
         final UUID id,
         final List<String> whiteList
     )
@@ -83,13 +84,6 @@ public class SmtpWorker implements Runnable {
     private Mode mode;
     public SmtpWorker setMode(Mode mode) {
         this.mode = mode;
-        return this;
-    }
-
-    private String hostname;
-    public SmtpWorker setHostname(final String hostname)
-    {
-        this.hostname = hostname;
         return this;
     }
 
@@ -208,7 +202,7 @@ public class SmtpWorker implements Runnable {
 
         final String presentation = forbiddenHost
             ? String.format("521 %s", forbiddenHostMessage.orElse("Server does not accept mail from you"))
-            : String.format("220 %s ESMTP Ready", this.hostname);
+            : String.format("220 %s ESMTP Ready", this.serverAddress.getHostName());
         logger.infof("S: %s", presentation);
 
         writeLine(os, presentation);
@@ -405,7 +399,7 @@ public class SmtpWorker implements Runnable {
 
     @SuppressWarnings("unused")
     private byte unavailable() throws IOException {
-        final String message = SmtpError.UNAVAILABLE.withHost(this.hostname);
+        final String message = SmtpError.UNAVAILABLE.withHost(this.serverAddress.getHostName());
         logger.infof("S: %s", message);
 
         writeLine(os, message);
@@ -463,7 +457,7 @@ public class SmtpWorker implements Runnable {
     private byte helo(final String statement) throws IOException {
         this.heloHost = statement.substring(5);
 
-        final String response = "250 " + this.hostname + " greets " + this.heloHost;
+        final String response = "250 " + this.serverAddress.getHostName() + " greets " + this.heloHost;
         logger.infof("S: %s", response);
 
         writeLine(os, response);
@@ -482,7 +476,7 @@ public class SmtpWorker implements Runnable {
 
         final List<String> responses = new ArrayList<>();
 
-        responses.add("250-" + this.hostname + " greets " + this.heloHost);
+        responses.add("250-" + this.serverAddress.getHostName() + " greets " + this.heloHost);
         responses.add("250-SIZE " + MAX_MESSAGE_SIZE);
         responses.add("250-ENHANCEDSTATUSCODES");
         responses.add("250-PIPELINING");
@@ -543,7 +537,7 @@ public class SmtpWorker implements Runnable {
         final SSLSocket sslSocket = (SSLSocket) sslSocketFactory
             .createSocket(
                 this.socket, 
-                this.socket.getInetAddress().getHostAddress(),
+                this.serverAddress.getHostName(),
                 this.socket.getPort(),
                 true
             );
@@ -1256,7 +1250,7 @@ public class SmtpWorker implements Runnable {
     }
 
     private byte quit() throws IOException {
-        final String response = "221 2.0.0 " + this.hostname + " Service closing transmission channel";
+        final String response = "221 2.0.0 " + this.serverAddress.getHostName() + " Service closing transmission channel";
 
         logger.infof("S: %s", response);
 
@@ -1456,7 +1450,7 @@ public class SmtpWorker implements Runnable {
         // Queuing only if this server is a relay, otherwise (final destination), persist data
 
         // Formato: 1700000000.N2837462.R1234.meuserver.com
-        final String hash = hash() + "." + this.hostname;
+        final String hash = hash() + "." + this.serverAddress.getHostName();
 
         queueId[0] = ThreadLocalRandom.current().nextInt(100000, 1000000);
 
@@ -1477,7 +1471,7 @@ public class SmtpWorker implements Runnable {
 
         received.append('[').append(this.clientAddress).append(']').append(')');
         received.append("\r\n").append(" ".repeat(receivedHeader.length()));
-        received.append("by ").append(this.hostname).append(" (Smtp Service)");
+        received.append("by ").append(this.serverAddress.getHostName()).append(" (Smtp Service)");
         received.append(" with ESMTP");
         if( ! ServerMode.SMTP.equals(serverMode) )
         {

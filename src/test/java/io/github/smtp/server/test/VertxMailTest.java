@@ -1,4 +1,4 @@
-package io.github.smtp.server;
+package io.github.smtp.server.test;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import io.github.smtp.configs.Configs;
 import io.github.smtp.configs.SslConfigs;
+import io.github.smtp.server.SmtpAgent;
 import io.quarkus.test.junit.QuarkusTest;
 
 import io.vertx.ext.mail.MailConfig;

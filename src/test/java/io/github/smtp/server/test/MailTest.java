@@ -1,4 +1,4 @@
-package io.github.smtp.server;
+package io.github.smtp.server.test;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.github.smtp.configs.Configs;
+import io.github.smtp.server.SmtpAgent;
 import io.quarkus.test.junit.QuarkusTest;
 
 import io.vertx.mutiny.core.Vertx;

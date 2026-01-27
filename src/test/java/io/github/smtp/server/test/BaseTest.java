@@ -1,4 +1,4 @@
-package io.github.smtp.server;
+package io.github.smtp.server.test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
