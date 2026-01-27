@@ -1,4 +1,4 @@
-package io.github.smtp.server;
+package io.github.smtp.server.test;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import io.github.smtp.configs.Configs;
 import io.github.smtp.protocol.SmtpError;
+import io.github.smtp.server.SmtpAgent;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 

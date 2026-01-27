@@ -207,8 +207,7 @@ public class SmtpAgent {
 
 	static final Integer DEFAULT_SMTP_PORT = 25;
 
-	private String serviceHost;
-	private String serviceAddress;
+	private InetAddress serviceAddress;
 
 	private List<String> whitelist;
 
@@ -225,21 +224,20 @@ public class SmtpAgent {
 	private SSLSocketFactory sslSocketFactory;
 
 	private void mountServers() throws Exception {
-        this.serviceHost = fetchServiceHost();
+        final String serviceHost = fetchServiceHost();
 
 		this.whitelist = listOf(configs.server().fqdnWhitelist())
 			.orElseGet(()-> List.of("localhost"));
 
 		this.contentFolder = fetchContentFolder();
 
-		final var address = InetAddress.getByName(serviceHost);
-		this.serviceAddress = address.getHostAddress();
+		this.serviceAddress = Inet4Address.getByName(serviceHost);
 
-		final var socketAddress = new InetSocketAddress(address, getPort());
+		final var socketAddress = new InetSocketAddress(this.serviceAddress, getPort());
 		this.server = new ServerSocket();
 		this.server.bind(socketAddress);
 
-		final var submissionSocketAddress = new InetSocketAddress(address, getSubmissionPort());
+		final var submissionSocketAddress = new InetSocketAddress(this.serviceAddress, getSubmissionPort());
 		this.submissionServer = new ServerSocket();
 		this.submissionServer.bind(submissionSocketAddress);
 
@@ -316,7 +314,6 @@ public class SmtpAgent {
 
 			this.threads.submit(
 				new SmtpWorker(client, ServerMode.SMTP, this.serviceAddress, UUID.randomUUID(), whitelist)
-					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
 					.setMode(getMode())
@@ -345,7 +342,6 @@ public class SmtpAgent {
 
 			this.threads.submit(
 				new SmtpWorker(client, ServerMode.SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
-					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
 					.setMode(getMode())
@@ -374,7 +370,6 @@ public class SmtpAgent {
 
 			this.threads.submit(
 				new SmtpWorker(client, ServerMode.SECURE_SUBMISSION, this.serviceAddress, UUID.randomUUID(), whitelist)
-					.setHostname(this.serviceHost)
 					.setContentFolder(this.contentFolder)
 					.setSslSocketFactory(this.sslSocketFactory)
 					.setMode(getMode())
