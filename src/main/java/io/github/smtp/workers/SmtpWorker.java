@@ -51,7 +51,6 @@ public class SmtpWorker implements Runnable {
     private String clientHostname;
     private String clientAddress;
 
-    @SuppressWarnings("unused")
     private InetAddress serverAddress;
 
     private final List<String> whiteList = new LinkedList<>();
@@ -266,10 +265,10 @@ public class SmtpWorker implements Runnable {
             quit(); // will throw exception to close
         }
 
-        if ("HELP".equalsIgnoreCase(statement))
-        {
-            return help();
-        }
+        // if ("HELP".equalsIgnoreCase(statement))
+        // {
+        //     return help();
+        // }
 
         if ("NOOP".equalsIgnoreCase(statement))
         {
@@ -436,17 +435,18 @@ public class SmtpWorker implements Runnable {
         return 0;
     }
     
-    private byte help() throws IOException {
-        final StringBuilder response = new StringBuilder();
+    // private byte help() throws IOException {
+    //     final StringBuilder response = new StringBuilder();
+//
+    //     response.append("211 2.0.0 EHLO HELO NOOP RSET VRFY EXPN AUTH MAIL RCPT HELP DATA BDAT");
+    //     logger.infof("S: %s", response);
+//
+    //     writeLine(os, response);
+    //     os.flush();
+//
+    //     return 0;
+    // }
 
-        response.append("211 2.0.0 EHLO HELO NOOP RSET VRFY EXPN AUTH MAIL RCPT HELP DATA BDAT");
-        logger.infof("S: %s", response);
-
-        writeLine(os, response);
-        os.flush();
-
-        return 0;
-    }
     /*
      * Reply Codes in Numeric Order
      * https://www.rfc-editor.org/rfc/rfc5321#section-4.2.3
@@ -472,7 +472,7 @@ public class SmtpWorker implements Runnable {
             ? String.format("[%s]", this.clientAddress)
             : this.clientHostname;
 
-        this.heloHost = statement != null ? statement.substring(5) : heloHost;
+        this.heloHost = Optional.ofNullable(statement).map(s -> s.substring(5)).orElse(heloHost);
 
         final List<String> responses = new ArrayList<>();
 
@@ -484,7 +484,6 @@ public class SmtpWorker implements Runnable {
         if( this.needAuth && this.isSecure )
         {
             responses.add("250-AUTH LOGIN PLAIN");
-            responses.add("250-AUTH=LOGIN PLAIN");
         }
 
         if( ! ServerMode.SECURE_SUBMISSION.equals(this.serverMode) && ! this.isSecure )
@@ -492,8 +491,8 @@ public class SmtpWorker implements Runnable {
             responses.add("250-STARTTLS");
         }
 
-        responses.add("250-HELP");
-        responses.add("250-SMTPUTF8");
+        //responses.add("250-HELP");
+        //responses.add("250-SMTPUTF8");
         responses.add("250-8BITMIME");
         responses.add("250-CHUNKING");
         responses.add("250 BINARYMIME");
@@ -523,7 +522,6 @@ public class SmtpWorker implements Runnable {
             ? SmtpError.TLS_ALREADY_ACTIVE.toString()
             : "220 2.0.0 Ready to start TLS";
 
-        // final String response = ""220 Ready to start TLS";
         logger.infof("S: %s", message);
 
         writeLine(os, message);
@@ -1450,7 +1448,8 @@ public class SmtpWorker implements Runnable {
         // Queuing only if this server is a relay, otherwise (final destination), persist data
 
         // Formato: 1700000000.N2837462.R1234.meuserver.com
-        final String hash = hash() + "." + this.serverAddress.getHostName();
+        final String domain = this.sender.getDomain();
+        final String hash = hash() + "." + (domain.isBlank() ? this.heloHost : domain);
 
         queueId[0] = ThreadLocalRandom.current().nextInt(100000, 1000000);
 

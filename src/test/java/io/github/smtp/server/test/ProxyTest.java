@@ -1,6 +1,6 @@
 package io.github.smtp.server.test;
 
-import io.quarkus.test.junit.QuarkusTest;
+//import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 
 import java.io.IOException;
@@ -21,7 +21,7 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 import org.jboss.logging.Logger;
-import org.junit.jupiter.api.Test;
+//import org.junit.jupiter.api.Test;
 
 //@QuarkusTest
 public class ProxyTest
